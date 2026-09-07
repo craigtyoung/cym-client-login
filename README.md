@@ -19,9 +19,18 @@ Approvals + notes are saved in the client's own browser (localStorage), so they 
 5. Deploy (see below) and send the client the link.
 
 ## Deploy to Railway
-This is a static site. Simplest path: serve the folder with any static host.
-- Railway: add a static file server (e.g. a tiny `serve`/Express wrapper) or use a static-site template, point it at this folder.
-- Or host on VoiceCraft alongside the platform.
+Ships with a zero-dependency Node static server (`server.js`) + `package.json` + `railway.json`, so Railway builds and runs it with no extra config.
+
+From this folder:
+```
+railway login          # one-time, opens the browser
+railway init --name cym-client-preview
+railway up             # builds + deploys this folder
+railway domain         # generates the public https link to send the client
+```
+Redeploy after any content edit with `railway up`. No GitHub required (though the folder is also a git repo if you prefer the dashboard's GitHub deploy).
+
+Verified locally: `PORT=3210 node server.js` serves index, data, logo, and audio correctly.
 
 ## Status values (in `client-data.js`)
 - `ready` — produced, ready for the client's review + approval

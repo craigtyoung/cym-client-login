@@ -13,10 +13,8 @@
     --navy:#141c2e; --navy-2:#1e2942; --ink:#1a2238; --muted:#6a7385;
     --line:#e7e9f0; --line-soft:#f0f1f6; --bg:#f6f7fb; --card:#fff;
     --gold:#b8935a; --gold-2:#caa76b;
-    --done:#1f9d6b; --done-bg:#e7f6ef;
-    --await:#b8935a; --await-bg:#f7efe1;
-    --alert:#c0492f; --alert-bg:#fbe9e5;
-    --lock:#c2c8d4; --lock-bg:#eef0f5;
+    --done:#1f9d6b; --done-bg:#e7f6ef; --await:#b8935a; --await-bg:#f7efe1;
+    --alert:#c0492f; --alert-bg:#fbe9e5; --lock:#c2c8d4; --lock-bg:#eef0f5;
     --shadow:0 1px 2px rgba(24,33,53,.04), 0 8px 24px rgba(24,33,53,.06);
     --topbar-h:72px;
   }
@@ -24,13 +22,26 @@
   html,body{height:100%}
   body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
 
+  /* Login */
+  .login-wrap{position:fixed;inset:0;background:linear-gradient(160deg,var(--navy) 0%,#0e1626 100%);display:flex;align-items:center;justify-content:center;z-index:80;padding:20px}
+  .login-card{background:#fff;border-radius:18px;padding:38px 34px;width:100%;max-width:400px;box-shadow:0 30px 80px rgba(0,0,0,.4);text-align:center}
+  .login-card img{height:74px;margin-bottom:8px}
+  .login-card .sub{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:22px}
+  .login-card input{width:100%;font-family:inherit;font-size:15px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;margin-bottom:12px;text-align:center}
+  .login-card button{width:100%;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;background:var(--navy);color:#fff;border:none;padding:12px;border-radius:10px}
+  .login-card button:hover{background:var(--navy-2)}
+  .login-err{color:var(--alert);font-size:13px;margin-bottom:10px;min-height:18px}
+  .login-hint{font-size:11.5px;color:var(--muted);margin-top:16px}
+
+  .app{display:none}
   .topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar-h);background:var(--navy);display:flex;align-items:center;justify-content:space-between;padding:0 24px;z-index:40;border-bottom:1px solid rgba(255,255,255,.06)}
   .tb-logo{height:52px;width:auto;display:block}
-  .tb-right{display:flex;align-items:center;gap:18px}
-  .tb-project{color:#aeb6c9;font-size:12.5px;font-weight:500}
-  .tb-project b{color:#fff;font-weight:600}
-  .login-btn{font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;color:var(--gold-2);background:transparent;border:1px solid rgba(184,147,90,.55);padding:8px 16px;border-radius:9px;transition:all .15s}
-  .login-btn:hover{background:rgba(184,147,90,.14);border-color:var(--gold-2)}
+  .tb-right{display:flex;align-items:center;gap:14px}
+  .role-badge{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:5px 11px;border-radius:20px}
+  .role-badge.admin{color:#0e1626;background:var(--gold-2)}
+  .role-badge.client{color:var(--gold-2);background:rgba(184,147,90,.16)}
+  .logout-btn{font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;color:#aeb6c9;background:transparent;border:1px solid rgba(255,255,255,.18);padding:7px 13px;border-radius:9px}
+  .logout-btn:hover{color:#fff;border-color:rgba(255,255,255,.35)}
 
   .shell{display:flex;padding-top:var(--topbar-h);min-height:100%}
   .sidebar{width:262px;flex:0 0 262px;background:#fff;border-right:1px solid var(--line);position:fixed;top:var(--topbar-h);bottom:0;left:0;overflow-y:auto;padding:22px 0}
@@ -40,7 +51,7 @@
   .side-proj{font-family:'Fraunces',serif;font-size:15px;color:var(--gold);margin-top:2px}
   .nav-sec-label{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#a6adbd;font-weight:600;padding:14px 15px 6px}
   nav{padding:2px 12px 0}
-  .nav-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--ink);background:none;border:none;cursor:pointer;padding:9px 12px;border-radius:9px;border-left:3px solid transparent;transition:all .13s;margin-bottom:2px}
+  .nav-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--ink);background:none;border:none;cursor:pointer;padding:9px 12px;border-radius:9px;border-left:3px solid transparent;margin-bottom:2px}
   .nav-item:hover{background:var(--bg)}
   .nav-item.sub{font-size:12.5px;color:var(--muted);padding-left:26px}
   .nav-item.active{background:var(--bg);border-left-color:var(--gold);color:var(--navy);font-weight:600}
@@ -55,8 +66,8 @@
   .ib-title{font-family:'Fraunces',serif;font-size:27px;font-weight:600;color:var(--navy);margin-bottom:6px}
   .ib-sub{font-size:13px;color:var(--muted);margin-bottom:12px}
   .ib-intro{font-size:14px;color:var(--ink);max-width:640px}
+  .admin-hint{margin-top:12px;font-size:12.5px;color:var(--gold);background:var(--await-bg);border-radius:9px;padding:9px 12px;display:inline-block}
 
-  /* Pipeline legend */
   .pipe-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:11px;padding:12px 16px;margin-bottom:22px;font-size:12px;color:var(--muted)}
   .pipe-legend .flow{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--ink)}
   .pipe-legend .arrow{color:var(--lock)}
@@ -75,7 +86,7 @@
   .list{background:var(--card);border:1px solid var(--line);border-radius:13px;overflow:hidden;box-shadow:var(--shadow)}
   .track{border-bottom:1px solid var(--line-soft)}
   .track:last-child{border-bottom:none}
-  .row{display:flex;align-items:center;gap:16px;padding:13px 16px;cursor:pointer;transition:background .12s}
+  .row{display:flex;align-items:center;gap:16px;padding:13px 16px;cursor:pointer}
   .row:hover{background:#fbfbfd}
   .track.complete .row{background:var(--done-bg)}
   .r-main{flex:1;min-width:0}
@@ -83,7 +94,6 @@
   .r-status{font-size:12px;margin-top:3px;font-weight:500}
   .r-status.done{color:var(--done)} .r-status.await{color:var(--await)} .r-status.alert{color:var(--alert)} .r-status.neutral{color:var(--muted)}
 
-  /* Tracker */
   .tracker{display:flex;align-items:flex-start;gap:0}
   .step{display:flex;flex-direction:column;align-items:center;width:66px;position:relative}
   .step .sdot{width:16px;height:16px;border-radius:50%;background:var(--lock-bg);border:2px solid var(--lock);z-index:2;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700}
@@ -114,299 +124,339 @@
   audio{width:100%;height:38px;margin-top:8px}
   .no-audio{font-size:12.5px;color:var(--muted);background:var(--bg);border:1px dashed var(--line);border-radius:9px;padding:9px 12px;margin-top:8px}
   .stage-actions{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
-  .approve-btn{font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid var(--done);background:#fff;color:var(--done);padding:7px 14px;border-radius:8px;transition:all .15s}
+  .approve-btn{font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid var(--done);background:#fff;color:var(--done);padding:7px 14px;border-radius:8px}
   .approve-btn.on{background:var(--done);color:#fff}
   .note-toggle{font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline;font-family:inherit}
   .note-box{width:100%;margin-top:8px;font-family:inherit;font-size:13px;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:9px 11px;resize:vertical;min-height:40px;display:none}
   .note-box.open{display:block}
+  .client-note-view{margin-top:8px;font-size:12.5px;color:var(--ink);background:var(--await-bg);border-radius:9px;padding:8px 11px}
+
+  /* Admin controls */
+  .admin-box{margin-top:10px;padding:11px 12px;border:1px dashed var(--gold);border-radius:10px;background:#fffdf9}
+  .admin-box .lbl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:8px}
+  .admin-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .admin-row input[type=file]{font-family:inherit;font-size:12px;max-width:230px}
+  .mini-btn{font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--navy);background:var(--navy);color:#fff;padding:6px 12px;border-radius:8px}
+  .mini-btn.ghost{background:#fff;color:var(--navy)}
+  .mini-btn:disabled{opacity:.5;cursor:default}
+  .admin-row select{font-family:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--line);border-radius:8px}
+  .toggle-lbl{font-size:12.5px;color:var(--ink);display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+  .uling{font-size:11.5px;color:var(--muted)}
 
   .bar{position:fixed;bottom:0;left:262px;right:0;background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 20px rgba(24,33,53,.06);padding:12px 30px;z-index:30}
   .bar-inner{display:flex;align-items:center;gap:16px;max-width:1000px}
   .bar-stat{font-size:13.5px;color:var(--muted);font-weight:500}
   .bar-stat b{color:var(--ink)}
-  .copy-btn{margin-left:auto;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;background:var(--navy);color:#fff;border:none;padding:11px 20px;border-radius:10px;transition:background .15s}
+  .copy-btn{margin-left:auto;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;background:var(--navy);color:#fff;border:none;padding:11px 20px;border-radius:10px}
   .copy-btn:hover{background:var(--navy-2)}
   .copy-btn.done{background:var(--done)}
 
-  .modal{position:fixed;inset:0;background:rgba(20,28,46,.55);display:none;align-items:center;justify-content:center;z-index:60;padding:20px}
-  .modal.open{display:flex}
-  .modal-card{background:#fff;border-radius:16px;max-width:420px;width:100%;padding:30px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
-  .modal-card h3{font-family:'Fraunces',serif;font-size:22px;color:var(--navy);margin-bottom:10px}
-  .modal-card p{font-size:14px;color:var(--muted);margin-bottom:20px}
-  .modal-card button{font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;background:var(--navy);color:#fff;border:none;padding:10px 22px;border-radius:10px}
-
   @media (max-width:860px){
-    .sidebar{display:none}
-    .main{margin-left:0;padding:18px 14px 110px}
-    .bar{left:0}
-    .tb-project{display:none}
-    .step{width:52px}
-    .step::before{width:52px;left:-26px}
-    .step .slabel{display:none}
+    .sidebar{display:none}.main{margin-left:0;padding:18px 14px 110px}.bar{left:0}
+    .step{width:52px}.step::before{width:52px;left:-26px}.step .slabel{display:none}
   }
 </style>
 </head>
 <body>
-  <div class="topbar">
-    <img class="tb-logo" id="logo" alt="Craig Young Music" />
-    <div class="tb-right">
-      <span class="tb-project" id="tbProject"></span>
-      <button class="login-btn" id="loginBtn">Client login</button>
+  <!-- Login -->
+  <div class="login-wrap" id="loginWrap">
+    <div class="login-card">
+      <img id="loginLogo" src="cym-logo-gold-tp.png" alt="Craig Young Music" style="filter:brightness(.55)" />
+      <div class="sub">Client Preview &amp; Approvals</div>
+      <div class="login-err" id="loginErr"></div>
+      <input id="loginCode" type="password" placeholder="Enter your access code" autocomplete="off" />
+      <button id="loginBtn">Enter</button>
+      <div class="login-hint">Your producer will have given you an access code.</div>
     </div>
   </div>
 
-  <div class="shell">
-    <aside class="sidebar">
-      <div class="side-context">
-        <div class="side-prepared">Prepared for</div>
-        <div class="side-client" id="sideClient"></div>
-        <div class="side-proj" id="sideProj"></div>
+  <!-- App -->
+  <div class="app" id="app">
+    <div class="topbar">
+      <img class="tb-logo" id="logo" alt="Craig Young Music" />
+      <div class="tb-right">
+        <span class="role-badge" id="roleBadge"></span>
+        <button class="logout-btn" id="logoutBtn">Log out</button>
       </div>
-      <div class="nav-sec-label">Collections</div>
-      <nav id="nav"></nav>
-      <div class="side-progress" id="sideProgress"></div>
-    </aside>
+    </div>
 
-    <main class="main">
-      <div class="intro-band">
-        <div class="ib-title" id="ibTitle"></div>
-        <div class="ib-sub" id="ibSub"></div>
-        <div class="ib-intro" id="ibIntro"></div>
-      </div>
-      <div class="pipe-legend">
-        <div class="flow"><span>Raw</span><span class="arrow">→</span><span>Cleaned vocal</span><span class="arrow">→</span><span>Music</span><span class="arrow">→</span><span>Final</span></div>
-        <div class="keys">
-          <span><i class="kdot await"></i> Awaiting you</span>
-          <span><i class="kdot done"></i> Approved</span>
-          <span><i class="kdot lock"></i> In progress</span>
-          <span><i class="kdot alert"></i> Re-record</span>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="side-context">
+          <div class="side-prepared">Prepared for</div>
+          <div class="side-client" id="sideClient"></div>
+          <div class="side-proj" id="sideProj"></div>
         </div>
+        <div class="nav-sec-label">Collections</div>
+        <nav id="nav"></nav>
+        <div class="side-progress" id="sideProgress"></div>
+      </aside>
+
+      <main class="main">
+        <div class="intro-band">
+          <div class="ib-title" id="ibTitle"></div>
+          <div class="ib-sub" id="ibSub"></div>
+          <div class="ib-intro" id="ibIntro"></div>
+          <div class="admin-hint" id="adminHint" style="display:none">Admin mode — upload audio to any stage and toggle when it's ready for the client to review.</div>
+        </div>
+        <div class="pipe-legend">
+          <div class="flow"><span>Raw</span><span class="arrow">→</span><span>Cleaned vocal</span><span class="arrow">→</span><span>Music</span><span class="arrow">→</span><span>Final</span></div>
+          <div class="keys">
+            <span><i class="kdot await"></i> Awaiting client</span>
+            <span><i class="kdot done"></i> Approved</span>
+            <span><i class="kdot lock"></i> In progress</span>
+            <span><i class="kdot alert"></i> Re-record</span>
+          </div>
+        </div>
+        <div id="categories"></div>
+      </main>
+    </div>
+
+    <div class="bar">
+      <div class="bar-inner">
+        <div class="bar-stat" id="barStat"></div>
+        <button class="copy-btn" id="copyBtn"></button>
       </div>
-      <div id="categories"></div>
-    </main>
-  </div>
-
-  <div class="bar">
-    <div class="bar-inner">
-      <div class="bar-stat" id="barStat"></div>
-      <button class="copy-btn" id="copyBtn"></button>
     </div>
   </div>
 
-  <div class="modal" id="loginModal">
-    <div class="modal-card">
-      <h3>Client login</h3>
-      <p>Secure client sign-in is part of the full platform, coming soon. For now your approvals save on this page and can be sent with the button below.</p>
-      <button id="modalClose">Got it</button>
-    </div>
-  </div>
-
-<script src="client-data.js"></script>
 <script>
 (function(){
-  var D=window.CLIENT_DATA;
-  if(!D){document.body.innerHTML='<p style="padding:40px">client-data.js not found.</p>';return;}
+  var D=null, ROLE=null, FILTER='__all__', openIds={};
+
+  // ---- api helpers
+  function api(method,url,body){
+    return fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined})
+      .then(function(r){ if(!r.ok) return r.json().then(function(j){throw j;}); return r.json(); });
+  }
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];});}
   function slug(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');}
-  var STORE_KEY='cym-preview-'+slug(D.client.name)+'-'+slug(D.client.project);
-  var state=load(); function load(){try{return JSON.parse(localStorage.getItem(STORE_KEY))||{};}catch(e){return {};}}
-  function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(state));}catch(e){}}
-  function stOf(k){return state[k]||(state[k]={});}
-  function keyFor(t){return slug(t.title);}
 
-  // Top bar + context
-  var logo=document.getElementById('logo');
-  if(D.brand.logoSrc)logo.src=D.brand.logoSrc; else logo.style.display='none';
-  document.getElementById('tbProject').innerHTML=D.brand.productName+' &nbsp;·&nbsp; <b>'+esc(D.client.project)+'</b>';
-  document.getElementById('sideClient').textContent=D.client.name;
-  document.getElementById('sideProj').textContent=D.client.project;
-  document.getElementById('ibTitle').textContent=D.client.project;
-  document.getElementById('ibSub').textContent='Prepared for '+D.client.name+'  ·  produced by '+D.client.preparedBy;
-  document.getElementById('ibIntro').textContent=D.client.intro;
-  document.getElementById('copyBtn').textContent=D.contact.label;
+  // ---- login
+  var loginWrap=document.getElementById('loginWrap'),loginErr=document.getElementById('loginErr');
+  function doLogin(){
+    var code=document.getElementById('loginCode').value;
+    api('POST','/api/login',{code:code}).then(function(){ boot(); })
+      .catch(function(e){ loginErr.textContent=(e&&e.error)||'Login failed'; });
+  }
+  document.getElementById('loginBtn').addEventListener('click',doLogin);
+  document.getElementById('loginCode').addEventListener('keydown',function(e){ if(e.key==='Enter') doLogin(); });
+  document.getElementById('logoutBtn').addEventListener('click',function(){ api('POST','/api/logout').then(function(){ location.reload(); }); });
 
-  var modal=document.getElementById('loginModal');
-  document.getElementById('loginBtn').addEventListener('click',function(){modal.classList.add('open');});
-  document.getElementById('modalClose').addEventListener('click',function(){modal.classList.remove('open');});
-  modal.addEventListener('click',function(e){if(e.target===modal)modal.classList.remove('open');});
+  function boot(){
+    api('GET','/api/data').then(function(data){
+      D=data; ROLE=data.role;
+      loginWrap.style.display='none';
+      document.getElementById('app').style.display='block';
+      initChrome(); render(); refreshBar();
+    }).catch(function(){ loginWrap.style.display='flex'; document.getElementById('app').style.display='none'; });
+  }
 
-  // ---- stage computation
+  function initChrome(){
+    var logo=document.getElementById('logo');
+    if(D.brand.logoSrc) logo.src=D.brand.logoSrc; else logo.style.display='none';
+    document.getElementById('sideClient').textContent=D.client.name;
+    document.getElementById('sideProj').textContent=D.client.project;
+    document.getElementById('ibTitle').textContent=D.client.project;
+    document.getElementById('ibSub').textContent='Prepared for '+D.client.name+'  ·  produced by '+D.client.preparedBy;
+    document.getElementById('ibIntro').textContent=D.client.intro;
+    var badge=document.getElementById('roleBadge');
+    badge.className='role-badge '+(ROLE==='admin'?'admin':'client');
+    badge.textContent=ROLE==='admin'?'Admin · '+D.client.preparedBy:'Client';
+    document.getElementById('adminHint').style.display = ROLE==='admin'?'inline-block':'none';
+    document.getElementById('copyBtn').textContent=D.contact&&D.contact.label?D.contact.label:'Copy my approvals to send to Craig';
+  }
+
+  // ---- model helpers
+  function appr(id){ return D.approvals[id] || {}; }
+  function eachCat(fn){ D.categories.forEach(fn); }
+  function catTracks(cat){ return cat.subcategories?cat.subcategories.reduce(function(a,s){return a.concat(s.tracks);},[]):cat.tracks; }
+  function allTracks(){ var out=[]; eachCat(function(cat){ if(cat.subcategories) cat.subcategories.forEach(function(s){ s.tracks.forEach(function(t){out.push({t:t,cat:cat.name,sub:s.name});}); }); else cat.tracks.forEach(function(t){out.push({t:t,cat:cat.name,sub:null});}); }); return out; }
+
   function steps(tr){
-    var s=stOf(keyFor(tr));
-    var raw = tr.raw==='rerecord' ? 'alert' : (tr.raw==='accepted' ? 'done' : 'neutral');
-    var cleaned = !tr.cleaned ? 'lock' : (s.cleanedApproved ? 'done' : 'await');
-    var music = !tr.music ? 'lock' : (s.musicSeen ? 'done' : 'await');
-    var fin = !tr.final ? 'lock' : (s.finalApproved ? 'done' : 'await');
-    return {raw:raw,cleaned:cleaned,music:music,final:fin};
+    var a=appr(tr.id);
+    return {
+      raw: tr.raw==='rerecord'?'alert':(tr.raw==='accepted'?'done':'neutral'),
+      cleaned: !tr.cleaned?'lock':(a.cleanedApproved?'done':'await'),
+      music: !tr.music?'lock':(a.musicSeen?'done':'await'),
+      final: !tr.final?'lock':(a.finalApproved?'done':'await')
+    };
   }
   function statusLabel(tr){
-    var s=stOf(keyFor(tr)), st=steps(tr);
+    var a=appr(tr.id);
     if(tr.raw==='rerecord') return ['Re-record requested','alert'];
-    if(tr.final && s.finalApproved) return ['Complete','done'];
-    if(tr.final && !s.finalApproved) return ['Final ready for your approval','await'];
-    if(tr.cleaned && !s.cleanedApproved) return ['Vocal ready for your approval','await'];
-    if(tr.cleaned && s.cleanedApproved) return ['In production — music & final','neutral'];
+    if(tr.final && a.finalApproved) return ['Complete','done'];
+    if(tr.final && !a.finalApproved) return ['Final ready for approval','await'];
+    if(tr.cleaned && !a.cleanedApproved) return ['Vocal ready for approval','await'];
+    if(tr.cleaned && a.cleanedApproved) return ['In production — music & final','neutral'];
     if(tr.raw==='accepted') return ['Accepted, in production','neutral'];
     return ['Received','neutral'];
   }
 
-  var nav=document.getElementById('nav'), host=document.getElementById('categories'), sections=[];
-  addNav('Overview','__all__',false);
-  D.categories.forEach(function(cat){
-    var sec=document.createElement('section');sec.className='category';sec.dataset.cat=cat.name;
-    var total=countTracks(cat), fin=countFinal(cat);
-    var head=document.createElement('div');head.className='cat-head';
-    head.innerHTML='<div class="cat-name">'+esc(cat.name)+'</div>'+(cat.subtitle?'<div class="cat-sub">'+esc(cat.subtitle)+'</div>':'')+'<div class="cat-count">'+total+' pieces</div>';
-    sec.appendChild(head);
-    var subEls={};
-    if(cat.subcategories){
-      cat.subcategories.forEach(function(sub){
-        var block=document.createElement('div');block.dataset.sub=sub.name;
-        var lbl=document.createElement('div');lbl.className='subcat';lbl.textContent=sub.name+'  ·  '+sub.tracks.length+' pieces';
-        block.appendChild(lbl);block.appendChild(listFor(sub.tracks));sec.appendChild(block);subEls[sub.name]=block;
-      });
-    }else{ sec.appendChild(listFor(cat.tracks)); }
-    host.appendChild(sec);sections.push({el:sec,cat:cat.name,subEls:subEls});
-    addNav(cat.name,cat.name,false,total);
-    if(cat.subcategories)cat.subcategories.forEach(function(sub){addNav(sub.name,cat.name+'::'+sub.name,true,sub.tracks.length);});
-  });
-
+  // ---- render
+  var nav=document.getElementById('nav'), host=document.getElementById('categories');
+  function render(){
+    nav.innerHTML=''; host.innerHTML='';
+    addNav('Overview','__all__',false);
+    eachCat(function(cat){
+      var sec=document.createElement('section');sec.className='category';
+      if(FILTER!=='__all__' && FILTER.split('::')[0]!==cat.name) sec.style.display='none';
+      var head=document.createElement('div');head.className='cat-head';
+      head.innerHTML='<div class="cat-name">'+esc(cat.name)+'</div>'+(cat.subtitle?'<div class="cat-sub">'+esc(cat.subtitle)+'</div>':'')+'<div class="cat-count">'+catTracks(cat).length+' pieces</div>';
+      sec.appendChild(head);
+      if(cat.subcategories){
+        cat.subcategories.forEach(function(sub){
+          var showSub = FILTER==='__all__' || FILTER===cat.name || FILTER===cat.name+'::'+sub.name;
+          var block=document.createElement('div'); if(!showSub) block.style.display='none';
+          var lbl=document.createElement('div');lbl.className='subcat';lbl.textContent=sub.name+'  ·  '+sub.tracks.length+' pieces';
+          block.appendChild(lbl);block.appendChild(listEl(sub.tracks));sec.appendChild(block);
+        });
+      }else{ sec.appendChild(listEl(cat.tracks)); }
+      host.appendChild(sec);
+      addNav(cat.name,cat.name,false,catTracks(cat).length);
+      if(cat.subcategories) cat.subcategories.forEach(function(sub){ addNav(sub.name,cat.name+'::'+sub.name,true,sub.tracks.length); });
+    });
+  }
   function addNav(label,filter,isSub,count){
     var b=document.createElement('button');
-    b.className='nav-item'+(isSub?' sub':'')+(filter==='__all__'?' active':'');
+    b.className='nav-item'+(isSub?' sub':'')+(FILTER===filter?' active':'');
     b.innerHTML=esc(label)+(count!=null?'<span class="n-count">'+count+'</span>':'');
-    b.addEventListener('click',function(){[].forEach.call(nav.querySelectorAll('.nav-item'),function(n){n.classList.remove('active');});b.classList.add('active');applyFilter(filter);window.scrollTo({top:0,behavior:'smooth'});});
+    b.addEventListener('click',function(){ FILTER=filter; render(); window.scrollTo({top:0,behavior:'smooth'}); });
     nav.appendChild(b);
   }
-  function applyFilter(filter){
-    if(filter==='__all__'){sections.forEach(function(s){s.el.style.display='';Object.keys(s.subEls).forEach(function(k){s.subEls[k].style.display='';});});return;}
-    var parts=filter.split('::'),cat=parts[0],sub=parts[1];
-    sections.forEach(function(s){
-      if(s.cat!==cat){s.el.style.display='none';return;}
-      s.el.style.display='';Object.keys(s.subEls).forEach(function(k){s.subEls[k].style.display=(sub?(k===sub?'':'none'):'');});
-    });
-  }
-
-  function listFor(tracks){var l=document.createElement('div');l.className='list';tracks.forEach(function(tr){l.appendChild(trackEl(tr));});return l;}
+  function listEl(tracks){ var l=document.createElement('div');l.className='list'; tracks.forEach(function(tr){ l.appendChild(trackEl(tr)); }); return l; }
 
   function trackEl(tr){
-    var k=keyFor(tr), s=stOf(k);
-    var wrap=document.createElement('div');wrap.className='track';
+    var wrap=document.createElement('div');wrap.className='track'+(appr(tr.id).finalApproved?' complete':'')+(openIds[tr.id]?' open':'');
     var st=steps(tr), lab=statusLabel(tr);
-    function stepHtml(cls,label,num){
-      var onLine=(cls==='done')?' on-line':'';
-      return '<div class="step '+cls+onLine+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>';
-    }
+    function stepHtml(cls,label,num){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
     var row=document.createElement('div');row.className='row';
     row.innerHTML='<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+'</div></div>'
-      +'<div class="tracker">'+stepHtml(st.raw,'Raw',1)+stepHtml(st.cleaned,'Vocal',2)+stepHtml(st.music,'Music',3)+stepHtml(st.final,'Final',4)+'</div>'
-      +'<div class="chev">▶</div>';
+      +'<div class="tracker">'+stepHtml(st.raw,'Raw',1)+stepHtml(st.cleaned,'Vocal',2)+stepHtml(st.music,'Music',3)+stepHtml(st.final,'Final',4)+'</div><div class="chev">▶</div>';
     var expand=document.createElement('div');expand.className='expand';
     wrap.appendChild(row);wrap.appendChild(expand);
-    if(s.finalApproved)wrap.classList.add('complete');
-
-    var built=false;
+    var built=openIds[tr.id]; if(built) buildExpand(tr,expand);
     row.addEventListener('click',function(){
-      if(!built){buildExpand();built=true;}
-      wrap.classList.toggle('open');
+      if(!expand.innerHTML) buildExpand(tr,expand);
+      var open=wrap.classList.toggle('open'); openIds[tr.id]=open?1:0;
     });
-
-    function buildExpand(){
-      // Stage 1 — Raw
-      var rawChip = tr.raw==='accepted' ? ['done','Accepted'] : (tr.raw==='rerecord' ? ['alert','Re-record'] : ['lock','Received']);
-      var rawBody = tr.raw==='rerecord'
-        ? '<div class="rerecord-banner">This recording needs to be re-recorded before I can take it into production. Details to follow.</div>'
-        : '<div class="stage-body">'+(tr.raw==='accepted'?'Your recording is in and accepted for production.':'Your recording is in. I will review it before production.')+'</div>';
-      expand.appendChild(stageEl('1','Raw vocal',rawChip[0],rawChip[1],rawBody,null));
-
-      // Stage 2 — Cleaned vocal (client approves)
-      expand.appendChild(clientStage('2','Cleaned vocal',tr.cleaned,tr.audio.cleaned,'cleanedApproved','cleanedNote',
-        'Listen and approve the cleaned vocal, or ask for a fix.','I will clean the vocal here once the raw is accepted.'));
-
-      // Stage 3 — Suggested music (preview + optional note, no approval)
-      var musicChip = !tr.music ? ['lock','In progress'] : (s.musicSeen?['done','Previewed']:['await','Ready to preview']);
-      var musicInner=document.createElement('div');
-      if(tr.music){
-        musicInner.innerHTML = audioHtml(tr.audio.music) + '<div class="stage-actions"><button class="approve-btn" data-mus="1">'+(s.musicSeen?'Music looks good ✓':'Mark music as previewed')+'</button><button class="note-toggle">Add a note on the music</button></div>';
-        var mnote=document.createElement('textarea');mnote.className='note-box'+(s.musicNote?' open':'');mnote.placeholder='Any thoughts on the music? Optional.';mnote.value=s.musicNote||'';
-        musicInner.appendChild(mnote);
-        musicInner.querySelector('[data-mus]').addEventListener('click',function(){s.musicSeen=!s.musicSeen;save();rerender();});
-        musicInner.querySelector('.note-toggle').addEventListener('click',function(){mnote.classList.toggle('open');if(mnote.classList.contains('open'))mnote.focus();});
-        mnote.addEventListener('input',function(){s.musicNote=mnote.value.trim();save();refreshBar();});
-      }else{ musicInner.innerHTML='<div class="stage-body">The suggested music comes after you approve the vocal.</div>'; }
-      expand.appendChild(stageEl('3','Suggested music',musicChip[0],musicChip[1],null,musicInner));
-
-      // Stage 4 — Final (client approves)
-      expand.appendChild(clientStage('4','Final production',tr.final,tr.audio.final,'finalApproved','finalNote',
-        'Give your final approval, or leave a note.','The final production comes together after the music.'));
-    }
-
-    function clientStage(num,name,ready,audioFile,approveKey,noteKey,readyHint,lockHint){
-      var approved=!!s[approveKey];
-      var chip = !ready ? ['lock','In progress'] : (approved?['done','Approved']:['await','Awaiting you']);
-      var inner=document.createElement('div');
-      if(ready){
-        inner.innerHTML=audioHtml(audioFile)+'<div class="stage-body">'+readyHint+'</div><div class="stage-actions"><button class="approve-btn'+(approved?' on':'')+'">'+(approved?'Approved ✓':'Approve')+'</button><button class="note-toggle">Request a change</button></div>';
-        var nb=document.createElement('textarea');nb.className='note-box'+(s[noteKey]?' open':'');nb.placeholder='What would you like changed?';nb.value=s[noteKey]||'';
-        inner.appendChild(nb);
-        inner.querySelector('.approve-btn').addEventListener('click',function(){s[approveKey]=!s[approveKey];save();rerender();});
-        inner.querySelector('.note-toggle').addEventListener('click',function(){nb.classList.toggle('open');if(nb.classList.contains('open'))nb.focus();});
-        nb.addEventListener('input',function(){s[noteKey]=nb.value.trim();save();refreshBar();});
-      }else{ inner.innerHTML='<div class="stage-body">'+lockHint+'</div>'; }
-      return stageEl(num,name,chip[0],chip[1],null,inner);
-    }
-
-    function rerender(){
-      // rebuild this track element in place, then open it (build expand)
-      var fresh=trackEl(tr);
-      wrap.replaceWith(fresh);
-      fresh.querySelector('.row').click();
-      refreshBar();
-    }
-
     return wrap;
   }
 
-  function stageEl(num,name,chipCls,chipText,bodyHtml,innerNode){
+  function stageEl(num,name,chipCls,chipText){
     var el=document.createElement('div');el.className='stage';
-    el.innerHTML='<div class="stage-head"><div class="stage-num">'+num+'</div><div class="stage-name">'+name+'</div><div class="stage-chip '+chipCls+'">'+chipText+'</div></div>'+(bodyHtml||'');
-    if(innerNode)el.appendChild(innerNode);
+    el.innerHTML='<div class="stage-head"><div class="stage-num">'+num+'</div><div class="stage-name">'+name+'</div><div class="stage-chip '+chipCls+'">'+chipText+'</div></div>';
     return el;
   }
-  function audioHtml(f){return f?'<audio controls preload="none" src="audio/'+encodeURIComponent(f)+'"></audio>':'<div class="no-audio">Preview will be added here shortly.</div>';}
+  function audioHtml(f){ return f?'<audio controls preload="none" src="audio/'+encodeURIComponent(f)+'"></audio>':'<div class="no-audio">No preview uploaded yet.</div>'; }
 
-  function countTracks(cat){return cat.subcategories?cat.subcategories.reduce(function(n,s){return n+s.tracks.length;},0):cat.tracks.length;}
-  function countFinal(cat){var list=flat(cat);return list.filter(function(t){return stOf(keyFor(t)).finalApproved;}).length;}
-  function flat(cat){return cat.subcategories?[].concat.apply([],cat.subcategories.map(function(s){return s.tracks;})):cat.tracks;}
-  function allTracks(){var out=[];D.categories.forEach(function(cat){if(cat.subcategories)cat.subcategories.forEach(function(s){s.tracks.forEach(function(t){out.push({t:t,cat:cat.name,sub:s.name});});});else cat.tracks.forEach(function(t){out.push({t:t,cat:cat.name,sub:null});});});return out;}
+  function buildExpand(tr,expand){
+    expand.innerHTML='';
+    var a=appr(tr.id);
+
+    // Stage 1 — Raw
+    var rawChip=tr.raw==='accepted'?['done','Accepted']:(tr.raw==='rerecord'?['alert','Re-record']:['lock','Received']);
+    var s1=stageEl('1','Raw vocal',rawChip[0],rawChip[1]);
+    if(tr.raw==='rerecord') s1.insertAdjacentHTML('beforeend','<div class="rerecord-banner">This recording needs to be re-recorded before it can go into production.</div>');
+    else s1.insertAdjacentHTML('beforeend','<div class="stage-body">'+(tr.raw==='accepted'?'Recording is in and accepted for production.':'Recording is in, awaiting review.')+'</div>');
+    if(ROLE==='admin'){
+      var ab=document.createElement('div');ab.className='admin-box';
+      ab.innerHTML='<div class="lbl">Admin</div><div class="admin-row">Raw status: <select data-raw><option value="received">Received</option><option value="accepted">Accepted</option><option value="rerecord">Needs re-record</option></select></div>';
+      ab.querySelector('[data-raw]').value=tr.raw;
+      ab.querySelector('[data-raw]').addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{raw:this.value}).then(reloadKeepOpen); });
+      s1.appendChild(ab);
+    }
+    expand.appendChild(s1);
+
+    // Stage 2,3,4
+    expand.appendChild(clientStage(tr,'2','Cleaned vocal','cleaned','Listen and approve the cleaned vocal, or ask for a fix.','I will clean the vocal here once the raw is accepted.'));
+    expand.appendChild(clientStage(tr,'3','Suggested music','music','Preview the music. Optional note if you have thoughts.','The suggested music comes after the vocal is approved.'));
+    expand.appendChild(clientStage(tr,'4','Final production','final','Give your final approval, or leave a note.','The final production comes together after the music.'));
+  }
+
+  function clientStage(tr,num,name,stage,readyHint,lockHint){
+    var a=appr(tr.id), ready=!!tr[stage], file=tr.audio[stage];
+    var isApproveStage=(stage==='cleaned'||stage==='final');
+    var approvedKey=stage==='cleaned'?'cleanedApproved':'finalApproved';
+    var approved=!!a[approvedKey];
+    var chip = !ready?['lock','In progress']:(stage==='music'?(a.musicSeen?['done','Previewed']:['await','Ready to preview']):(approved?['done','Approved']:['await','Awaiting client']));
+    var el=stageEl(num,name,chip[0],chip[1]);
+
+    if(ready){
+      el.insertAdjacentHTML('beforeend',audioHtml(file));
+      if(ROLE==='client'){
+        var actions=document.createElement('div');actions.className='stage-actions';
+        if(isApproveStage){
+          actions.innerHTML='<button class="approve-btn'+(approved?' on':'')+'">'+(approved?'Approved ✓':'Approve')+'</button><button class="note-toggle">Request a change</button>';
+          actions.querySelector('.approve-btn').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:stage,approved:!approved}).then(reloadKeepOpen); });
+        }else{ // music
+          actions.innerHTML='<button class="approve-btn'+(a.musicSeen?' on':'')+'">'+(a.musicSeen?'Music looks good ✓':'Mark music as previewed')+'</button><button class="note-toggle">Add a note on the music</button>';
+          actions.querySelector('.approve-btn').addEventListener('click',function(){ api('POST','/api/music-seen',{trackId:tr.id,seen:!a.musicSeen}).then(reloadKeepOpen); });
+        }
+        el.appendChild(actions);
+        var nb=document.createElement('textarea');nb.className='note-box'+((a[stage+'Note'])?' open':'');nb.placeholder='What would you like changed?';nb.value=a[stage+'Note']||'';
+        el.appendChild(nb);
+        actions.querySelector('.note-toggle').addEventListener('click',function(){ nb.classList.toggle('open'); if(nb.classList.contains('open')) nb.focus(); });
+        nb.addEventListener('change',function(){ api('POST','/api/note',{trackId:tr.id,stage:stage,note:nb.value.trim()}).then(function(){ a[stage+'Note']=nb.value.trim(); refreshBar(); }); });
+      }else{
+        // admin sees the client's note + approval read-only
+        if(a[stage+'Note']) el.insertAdjacentHTML('beforeend','<div class="client-note-view"><b>Client note:</b> '+esc(a[stage+'Note'])+'</div>');
+      }
+    }else{
+      el.insertAdjacentHTML('beforeend','<div class="stage-body">'+lockHint+'</div>');
+    }
+
+    // admin upload/ready controls (all three stages)
+    if(ROLE==='admin'){
+      var ab=document.createElement('div');ab.className='admin-box';
+      ab.innerHTML='<div class="lbl">Admin — '+esc(name)+'</div>'
+        +'<div class="admin-row"><input type="file" accept="audio/*" data-file><button class="mini-btn" data-up>Upload</button><span class="uling" data-cur>'+(file?('current: '+esc(file)):'no file yet')+'</span></div>'
+        +'<div class="admin-row"><label class="toggle-lbl"><input type="checkbox" data-ready '+(ready?'checked':'')+'> Ready for client to review</label></div>';
+      var fileInput=ab.querySelector('[data-file]'), upBtn=ab.querySelector('[data-up]'), readyCb=ab.querySelector('[data-ready]');
+      upBtn.addEventListener('click',function(){
+        if(!fileInput.files||!fileInput.files[0]){ return; }
+        upBtn.disabled=true;upBtn.textContent='Uploading…';
+        var fd=new FormData();fd.append('file',fileInput.files[0]);fd.append('trackId',tr.id);fd.append('stage',stage);
+        fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(){ reloadKeepOpen(); })
+          .catch(function(){ upBtn.disabled=false;upBtn.textContent='Upload'; alert('Upload failed'); });
+      });
+      readyCb.addEventListener('change',function(){ var patch={};patch[stage]=readyCb.checked; api('POST','/api/track/'+tr.id,patch).then(reloadKeepOpen); });
+      el.appendChild(ab);
+    }
+    return el;
+  }
+
+  function reloadKeepOpen(){ return api('GET','/api/data').then(function(data){ D=data; render(); refreshBar(); }); }
 
   function refreshBar(){
     var fin=0,voc=0,notes=0,total=0;
-    allTracks().forEach(function(x){total++;var s=stOf(keyFor(x.t));if(s.finalApproved)fin++;if(s.cleanedApproved)voc++;if(s.cleanedNote||s.finalNote||s.musicNote)notes++;});
+    allTracks().forEach(function(x){ total++; var a=appr(x.t.id); if(a.finalApproved)fin++; if(a.cleanedApproved)voc++; if(a.cleanedNote||a.finalNote||a.musicNote)notes++; });
     document.getElementById('barStat').innerHTML='<b>'+fin+'</b> finalized · <b>'+voc+'</b> vocals approved · <b>'+notes+'</b> with notes';
     var pct=total?Math.round(fin/total*100):0;
     document.getElementById('sideProgress').innerHTML='<b>'+fin+'</b> of '+total+' finalized<div class="prog-track"><div class="prog-fill" style="width:'+pct+'%"></div></div>';
   }
-  refreshBar();
 
   document.getElementById('copyBtn').addEventListener('click',function(){
     var lines=[D.client.project+' — my review','('+D.client.name+')',''],fin=[],voc=[],notes=[];
     allTracks().forEach(function(x){
-      var s=stOf(keyFor(x.t)),loc=x.sub?x.cat+' / '+x.sub:x.cat,ttl=x.t.title;
-      if(s.finalApproved)fin.push('✓ '+ttl+' ('+loc+')');
-      else if(s.cleanedApproved)voc.push('• '+ttl+' — vocal approved ('+loc+')');
-      if(s.cleanedNote)notes.push('• '+ttl+' [vocal]: '+s.cleanedNote);
-      if(s.musicNote)notes.push('• '+ttl+' [music]: '+s.musicNote);
-      if(s.finalNote)notes.push('• '+ttl+' [final]: '+s.finalNote);
+      var a=appr(x.t.id),loc=x.sub?x.cat+' / '+x.sub:x.cat,ttl=x.t.title;
+      if(a.finalApproved)fin.push('✓ '+ttl+' ('+loc+')'); else if(a.cleanedApproved)voc.push('• '+ttl+' — vocal approved ('+loc+')');
+      if(a.cleanedNote)notes.push('• '+ttl+' [vocal]: '+a.cleanedNote);
+      if(a.musicNote)notes.push('• '+ttl+' [music]: '+a.musicNote);
+      if(a.finalNote)notes.push('• '+ttl+' [final]: '+a.finalNote);
     });
     lines.push('FINAL APPROVED ('+fin.length+'):');lines=lines.concat(fin.length?fin:['(none yet)']);
     lines.push('','VOCAL APPROVED, awaiting final ('+voc.length+'):');lines=lines.concat(voc.length?voc:['(none)']);
     lines.push('','NOTES / CHANGES ('+notes.length+'):');lines=lines.concat(notes.length?notes:['(none)']);
-    var text=lines.join('\n'),btn=this;
-    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(function(){flash(btn);},function(){fb(text,btn);});else fb(text,btn);
+    var text=lines.join('\n'),btn=this,method=(D.contact&&D.contact.method)||'WhatsApp';
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function(){flash(btn,method);},function(){fb(text,btn,method);}); else fb(text,btn,method);
   });
-  function flash(btn){var o=btn.textContent;btn.textContent='Copied ✓ — paste into '+D.contact.method;btn.classList.add('done');setTimeout(function(){btn.textContent=o;btn.classList.remove('done');},2600);}
-  function fb(text,btn){var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');flash(btn);}catch(e){alert(text);}document.body.removeChild(ta);}
-  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];});}
+  function flash(btn,m){var o=btn.textContent;btn.textContent='Copied ✓ — paste into '+m;btn.classList.add('done');setTimeout(function(){btn.textContent=o;btn.classList.remove('done');},2600);}
+  function fb(text,btn,m){var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');flash(btn,m);}catch(e){alert(text);}document.body.removeChild(ta);}
+
+  // ---- start: check session
+  api('GET','/api/me').then(function(m){ if(m.role) boot(); else { loginWrap.style.display='flex'; } })
+    .catch(function(){ loginWrap.style.display='flex'; });
 })();
 </script>
 </body>

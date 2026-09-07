@@ -2,3 +2,7 @@ node_modules/
 .DS_Store
 *.log
 .railway/
+
+# Runtime data store (generated; on Railway this is a mounted volume)
+data/
+testdata/
