@@ -1,0 +1,12 @@
+{
+  "name": "cym-client-preview",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Craig Young Music — client preview & approvals platform",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

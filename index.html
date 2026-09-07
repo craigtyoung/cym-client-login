@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Craig Young Music — Client Preview</title>
+<link rel="icon" href="favicon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --navy:#141c2e; --navy-2:#1e2942; --ink:#1a2238; --muted:#6a7385;
+    --line:#e7e9f0; --line-soft:#f0f1f6; --bg:#f6f7fb; --card:#fff;
+    --gold:#b8935a; --gold-2:#caa76b;
+    --done:#1f9d6b; --done-bg:#e7f6ef;
+    --await:#b8935a; --await-bg:#f7efe1;
+    --alert:#c0492f; --alert-bg:#fbe9e5;
+    --lock:#c2c8d4; --lock-bg:#eef0f5;
+    --shadow:0 1px 2px rgba(24,33,53,.04), 0 8px 24px rgba(24,33,53,.06);
+    --topbar-h:72px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
+
+  .topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar-h);background:var(--navy);display:flex;align-items:center;justify-content:space-between;padding:0 24px;z-index:40;border-bottom:1px solid rgba(255,255,255,.06)}
+  .tb-logo{height:52px;width:auto;display:block}
+  .tb-right{display:flex;align-items:center;gap:18px}
+  .tb-project{color:#aeb6c9;font-size:12.5px;font-weight:500}
+  .tb-project b{color:#fff;font-weight:600}
+  .login-btn{font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;color:var(--gold-2);background:transparent;border:1px solid rgba(184,147,90,.55);padding:8px 16px;border-radius:9px;transition:all .15s}
+  .login-btn:hover{background:rgba(184,147,90,.14);border-color:var(--gold-2)}
+
+  .shell{display:flex;padding-top:var(--topbar-h);min-height:100%}
+  .sidebar{width:262px;flex:0 0 262px;background:#fff;border-right:1px solid var(--line);position:fixed;top:var(--topbar-h);bottom:0;left:0;overflow-y:auto;padding:22px 0}
+  .side-context{padding:0 20px 18px;margin-bottom:8px;border-bottom:1px solid var(--line-soft)}
+  .side-prepared{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:6px}
+  .side-client{font-size:15px;font-weight:600;color:var(--ink)}
+  .side-proj{font-family:'Fraunces',serif;font-size:15px;color:var(--gold);margin-top:2px}
+  .nav-sec-label{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#a6adbd;font-weight:600;padding:14px 15px 6px}
+  nav{padding:2px 12px 0}
+  .nav-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--ink);background:none;border:none;cursor:pointer;padding:9px 12px;border-radius:9px;border-left:3px solid transparent;transition:all .13s;margin-bottom:2px}
+  .nav-item:hover{background:var(--bg)}
+  .nav-item.sub{font-size:12.5px;color:var(--muted);padding-left:26px}
+  .nav-item.active{background:var(--bg);border-left-color:var(--gold);color:var(--navy);font-weight:600}
+  .nav-item .n-count{margin-left:auto;font-size:11px;color:var(--muted)}
+  .side-progress{margin:16px 20px 0;padding:14px;background:var(--bg);border-radius:11px;font-size:12.5px;color:var(--muted)}
+  .side-progress b{color:var(--ink);font-weight:600}
+  .prog-track{height:6px;background:#e3e6ef;border-radius:4px;margin-top:9px;overflow:hidden}
+  .prog-fill{height:100%;background:var(--done);width:0;transition:width .3s}
+
+  .main{margin-left:262px;flex:1;padding:26px 30px 110px;max-width:1000px}
+  .intro-band{background:linear-gradient(180deg,#fff 0%,#f9fafd 100%);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px;box-shadow:var(--shadow)}
+  .ib-title{font-family:'Fraunces',serif;font-size:27px;font-weight:600;color:var(--navy);margin-bottom:6px}
+  .ib-sub{font-size:13px;color:var(--muted);margin-bottom:12px}
+  .ib-intro{font-size:14px;color:var(--ink);max-width:640px}
+
+  /* Pipeline legend */
+  .pipe-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:11px;padding:12px 16px;margin-bottom:22px;font-size:12px;color:var(--muted)}
+  .pipe-legend .flow{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--ink)}
+  .pipe-legend .arrow{color:var(--lock)}
+  .pipe-legend .keys{margin-left:auto;display:flex;gap:14px;flex-wrap:wrap}
+  .pipe-legend .keys span{display:inline-flex;align-items:center;gap:6px}
+  .kdot{width:9px;height:9px;border-radius:50%}
+  .kdot.done{background:var(--done)} .kdot.await{background:var(--await)} .kdot.lock{background:var(--lock)} .kdot.alert{background:var(--alert)}
+
+  .category{margin-bottom:30px}
+  .cat-head{display:flex;align-items:baseline;gap:10px;margin:0 2px 8px}
+  .cat-name{font-family:'Fraunces',serif;font-size:22px;font-weight:600;color:var(--navy)}
+  .cat-sub{font-size:12.5px;color:var(--muted);font-style:italic}
+  .cat-count{margin-left:auto;font-size:12px;color:var(--muted)}
+  .subcat{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin:16px 4px 8px}
+
+  .list{background:var(--card);border:1px solid var(--line);border-radius:13px;overflow:hidden;box-shadow:var(--shadow)}
+  .track{border-bottom:1px solid var(--line-soft)}
+  .track:last-child{border-bottom:none}
+  .row{display:flex;align-items:center;gap:16px;padding:13px 16px;cursor:pointer;transition:background .12s}
+  .row:hover{background:#fbfbfd}
+  .track.complete .row{background:var(--done-bg)}
+  .r-main{flex:1;min-width:0}
+  .r-title{font-size:14.5px;font-weight:600;color:var(--ink)}
+  .r-status{font-size:12px;margin-top:3px;font-weight:500}
+  .r-status.done{color:var(--done)} .r-status.await{color:var(--await)} .r-status.alert{color:var(--alert)} .r-status.neutral{color:var(--muted)}
+
+  /* Tracker */
+  .tracker{display:flex;align-items:flex-start;gap:0}
+  .step{display:flex;flex-direction:column;align-items:center;width:66px;position:relative}
+  .step .sdot{width:16px;height:16px;border-radius:50%;background:var(--lock-bg);border:2px solid var(--lock);z-index:2;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700}
+  .step.done .sdot{background:var(--done);border-color:var(--done)}
+  .step.await .sdot{background:var(--await);border-color:var(--await)}
+  .step.alert .sdot{background:var(--alert);border-color:var(--alert)}
+  .step .slabel{font-size:10px;color:var(--muted);margin-top:5px;white-space:nowrap;font-weight:500}
+  .step.done .slabel,.step.await .slabel{color:var(--ink)}
+  .step::before{content:"";position:absolute;top:7px;left:-33px;width:66px;height:2px;background:var(--lock);z-index:1}
+  .step:first-child::before{display:none}
+  .step.on-line::before{background:var(--done)}
+  .chev{color:var(--muted);font-size:13px;transition:transform .2s;flex:0 0 auto}
+  .track.open .chev{transform:rotate(90deg)}
+
+  .expand{display:none;padding:4px 16px 18px;background:#fcfcfe}
+  .track.open .expand{display:block}
+  .stage{border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-top:10px}
+  .stage-head{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .stage-num{width:20px;height:20px;border-radius:50%;background:var(--navy);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .stage-name{font-size:13.5px;font-weight:600;color:var(--ink)}
+  .stage-chip{margin-left:auto;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px}
+  .stage-chip.done{color:var(--done);background:var(--done-bg)}
+  .stage-chip.await{color:var(--await);background:var(--await-bg)}
+  .stage-chip.alert{color:var(--alert);background:var(--alert-bg)}
+  .stage-chip.lock{color:var(--muted);background:var(--lock-bg)}
+  .stage-body{font-size:12.5px;color:var(--muted);margin-top:6px}
+  .rerecord-banner{background:var(--alert-bg);color:var(--alert);font-size:12.5px;font-weight:500;border-radius:9px;padding:9px 12px;margin-top:6px}
+  audio{width:100%;height:38px;margin-top:8px}
+  .no-audio{font-size:12.5px;color:var(--muted);background:var(--bg);border:1px dashed var(--line);border-radius:9px;padding:9px 12px;margin-top:8px}
+  .stage-actions{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+  .approve-btn{font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid var(--done);background:#fff;color:var(--done);padding:7px 14px;border-radius:8px;transition:all .15s}
+  .approve-btn.on{background:var(--done);color:#fff}
+  .note-toggle{font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline;font-family:inherit}
+  .note-box{width:100%;margin-top:8px;font-family:inherit;font-size:13px;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:9px 11px;resize:vertical;min-height:40px;display:none}
+  .note-box.open{display:block}
+
+  .bar{position:fixed;bottom:0;left:262px;right:0;background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 20px rgba(24,33,53,.06);padding:12px 30px;z-index:30}
+  .bar-inner{display:flex;align-items:center;gap:16px;max-width:1000px}
+  .bar-stat{font-size:13.5px;color:var(--muted);font-weight:500}
+  .bar-stat b{color:var(--ink)}
+  .copy-btn{margin-left:auto;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;background:var(--navy);color:#fff;border:none;padding:11px 20px;border-radius:10px;transition:background .15s}
+  .copy-btn:hover{background:var(--navy-2)}
+  .copy-btn.done{background:var(--done)}
+
+  .modal{position:fixed;inset:0;background:rgba(20,28,46,.55);display:none;align-items:center;justify-content:center;z-index:60;padding:20px}
+  .modal.open{display:flex}
+  .modal-card{background:#fff;border-radius:16px;max-width:420px;width:100%;padding:30px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .modal-card h3{font-family:'Fraunces',serif;font-size:22px;color:var(--navy);margin-bottom:10px}
+  .modal-card p{font-size:14px;color:var(--muted);margin-bottom:20px}
+  .modal-card button{font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;background:var(--navy);color:#fff;border:none;padding:10px 22px;border-radius:10px}
+
+  @media (max-width:860px){
+    .sidebar{display:none}
+    .main{margin-left:0;padding:18px 14px 110px}
+    .bar{left:0}
+    .tb-project{display:none}
+    .step{width:52px}
+    .step::before{width:52px;left:-26px}
+    .step .slabel{display:none}
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <img class="tb-logo" id="logo" alt="Craig Young Music" />
+    <div class="tb-right">
+      <span class="tb-project" id="tbProject"></span>
+      <button class="login-btn" id="loginBtn">Client login</button>
+    </div>
+  </div>
+
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="side-context">
+        <div class="side-prepared">Prepared for</div>
+        <div class="side-client" id="sideClient"></div>
+        <div class="side-proj" id="sideProj"></div>
+      </div>
+      <div class="nav-sec-label">Collections</div>
+      <nav id="nav"></nav>
+      <div class="side-progress" id="sideProgress"></div>
+    </aside>
+
+    <main class="main">
+      <div class="intro-band">
+        <div class="ib-title" id="ibTitle"></div>
+        <div class="ib-sub" id="ibSub"></div>
+        <div class="ib-intro" id="ibIntro"></div>
+      </div>
+      <div class="pipe-legend">
+        <div class="flow"><span>Raw</span><span class="arrow">→</span><span>Cleaned vocal</span><span class="arrow">→</span><span>Music</span><span class="arrow">→</span><span>Final</span></div>
+        <div class="keys">
+          <span><i class="kdot await"></i> Awaiting you</span>
+          <span><i class="kdot done"></i> Approved</span>
+          <span><i class="kdot lock"></i> In progress</span>
+          <span><i class="kdot alert"></i> Re-record</span>
+        </div>
+      </div>
+      <div id="categories"></div>
+    </main>
+  </div>
+
+  <div class="bar">
+    <div class="bar-inner">
+      <div class="bar-stat" id="barStat"></div>
+      <button class="copy-btn" id="copyBtn"></button>
+    </div>
+  </div>
+
+  <div class="modal" id="loginModal">
+    <div class="modal-card">
+      <h3>Client login</h3>
+      <p>Secure client sign-in is part of the full platform, coming soon. For now your approvals save on this page and can be sent with the button below.</p>
+      <button id="modalClose">Got it</button>
+    </div>
+  </div>
+
+<script src="client-data.js"></script>
+<script>
+(function(){
+  var D=window.CLIENT_DATA;
+  if(!D){document.body.innerHTML='<p style="padding:40px">client-data.js not found.</p>';return;}
+  function slug(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');}
+  var STORE_KEY='cym-preview-'+slug(D.client.name)+'-'+slug(D.client.project);
+  var state=load(); function load(){try{return JSON.parse(localStorage.getItem(STORE_KEY))||{};}catch(e){return {};}}
+  function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(state));}catch(e){}}
+  function stOf(k){return state[k]||(state[k]={});}
+  function keyFor(t){return slug(t.title);}
+
+  // Top bar + context
+  var logo=document.getElementById('logo');
+  if(D.brand.logoSrc)logo.src=D.brand.logoSrc; else logo.style.display='none';
+  document.getElementById('tbProject').innerHTML=D.brand.productName+' &nbsp;·&nbsp; <b>'+esc(D.client.project)+'</b>';
+  document.getElementById('sideClient').textContent=D.client.name;
+  document.getElementById('sideProj').textContent=D.client.project;
+  document.getElementById('ibTitle').textContent=D.client.project;
+  document.getElementById('ibSub').textContent='Prepared for '+D.client.name+'  ·  produced by '+D.client.preparedBy;
+  document.getElementById('ibIntro').textContent=D.client.intro;
+  document.getElementById('copyBtn').textContent=D.contact.label;
+
+  var modal=document.getElementById('loginModal');
+  document.getElementById('loginBtn').addEventListener('click',function(){modal.classList.add('open');});
+  document.getElementById('modalClose').addEventListener('click',function(){modal.classList.remove('open');});
+  modal.addEventListener('click',function(e){if(e.target===modal)modal.classList.remove('open');});
+
+  // ---- stage computation
+  function steps(tr){
+    var s=stOf(keyFor(tr));
+    var raw = tr.raw==='rerecord' ? 'alert' : (tr.raw==='accepted' ? 'done' : 'neutral');
+    var cleaned = !tr.cleaned ? 'lock' : (s.cleanedApproved ? 'done' : 'await');
+    var music = !tr.music ? 'lock' : (s.musicSeen ? 'done' : 'await');
+    var fin = !tr.final ? 'lock' : (s.finalApproved ? 'done' : 'await');
+    return {raw:raw,cleaned:cleaned,music:music,final:fin};
+  }
+  function statusLabel(tr){
+    var s=stOf(keyFor(tr)), st=steps(tr);
+    if(tr.raw==='rerecord') return ['Re-record requested','alert'];
+    if(tr.final && s.finalApproved) return ['Complete','done'];
+    if(tr.final && !s.finalApproved) return ['Final ready for your approval','await'];
+    if(tr.cleaned && !s.cleanedApproved) return ['Vocal ready for your approval','await'];
+    if(tr.cleaned && s.cleanedApproved) return ['In production — music & final','neutral'];
+    if(tr.raw==='accepted') return ['Accepted, in production','neutral'];
+    return ['Received','neutral'];
+  }
+
+  var nav=document.getElementById('nav'), host=document.getElementById('categories'), sections=[];
+  addNav('Overview','__all__',false);
+  D.categories.forEach(function(cat){
+    var sec=document.createElement('section');sec.className='category';sec.dataset.cat=cat.name;
+    var total=countTracks(cat), fin=countFinal(cat);
+    var head=document.createElement('div');head.className='cat-head';
+    head.innerHTML='<div class="cat-name">'+esc(cat.name)+'</div>'+(cat.subtitle?'<div class="cat-sub">'+esc(cat.subtitle)+'</div>':'')+'<div class="cat-count">'+total+' pieces</div>';
+    sec.appendChild(head);
+    var subEls={};
+    if(cat.subcategories){
+      cat.subcategories.forEach(function(sub){
+        var block=document.createElement('div');block.dataset.sub=sub.name;
+        var lbl=document.createElement('div');lbl.className='subcat';lbl.textContent=sub.name+'  ·  '+sub.tracks.length+' pieces';
+        block.appendChild(lbl);block.appendChild(listFor(sub.tracks));sec.appendChild(block);subEls[sub.name]=block;
+      });
+    }else{ sec.appendChild(listFor(cat.tracks)); }
+    host.appendChild(sec);sections.push({el:sec,cat:cat.name,subEls:subEls});
+    addNav(cat.name,cat.name,false,total);
+    if(cat.subcategories)cat.subcategories.forEach(function(sub){addNav(sub.name,cat.name+'::'+sub.name,true,sub.tracks.length);});
+  });
+
+  function addNav(label,filter,isSub,count){
+    var b=document.createElement('button');
+    b.className='nav-item'+(isSub?' sub':'')+(filter==='__all__'?' active':'');
+    b.innerHTML=esc(label)+(count!=null?'<span class="n-count">'+count+'</span>':'');
+    b.addEventListener('click',function(){[].forEach.call(nav.querySelectorAll('.nav-item'),function(n){n.classList.remove('active');});b.classList.add('active');applyFilter(filter);window.scrollTo({top:0,behavior:'smooth'});});
+    nav.appendChild(b);
+  }
+  function applyFilter(filter){
+    if(filter==='__all__'){sections.forEach(function(s){s.el.style.display='';Object.keys(s.subEls).forEach(function(k){s.subEls[k].style.display='';});});return;}
+    var parts=filter.split('::'),cat=parts[0],sub=parts[1];
+    sections.forEach(function(s){
+      if(s.cat!==cat){s.el.style.display='none';return;}
+      s.el.style.display='';Object.keys(s.subEls).forEach(function(k){s.subEls[k].style.display=(sub?(k===sub?'':'none'):'');});
+    });
+  }
+
+  function listFor(tracks){var l=document.createElement('div');l.className='list';tracks.forEach(function(tr){l.appendChild(trackEl(tr));});return l;}
+
+  function trackEl(tr){
+    var k=keyFor(tr), s=stOf(k);
+    var wrap=document.createElement('div');wrap.className='track';
+    var st=steps(tr), lab=statusLabel(tr);
+    function stepHtml(cls,label,num){
+      var onLine=(cls==='done')?' on-line':'';
+      return '<div class="step '+cls+onLine+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>';
+    }
+    var row=document.createElement('div');row.className='row';
+    row.innerHTML='<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+'</div></div>'
+      +'<div class="tracker">'+stepHtml(st.raw,'Raw',1)+stepHtml(st.cleaned,'Vocal',2)+stepHtml(st.music,'Music',3)+stepHtml(st.final,'Final',4)+'</div>'
+      +'<div class="chev">▶</div>';
+    var expand=document.createElement('div');expand.className='expand';
+    wrap.appendChild(row);wrap.appendChild(expand);
+    if(s.finalApproved)wrap.classList.add('complete');
+
+    var built=false;
+    row.addEventListener('click',function(){
+      if(!built){buildExpand();built=true;}
+      wrap.classList.toggle('open');
+    });
+
+    function buildExpand(){
+      // Stage 1 — Raw
+      var rawChip = tr.raw==='accepted' ? ['done','Accepted'] : (tr.raw==='rerecord' ? ['alert','Re-record'] : ['lock','Received']);
+      var rawBody = tr.raw==='rerecord'
+        ? '<div class="rerecord-banner">This recording needs to be re-recorded before I can take it into production. Details to follow.</div>'
+        : '<div class="stage-body">'+(tr.raw==='accepted'?'Your recording is in and accepted for production.':'Your recording is in. I will review it before production.')+'</div>';
+      expand.appendChild(stageEl('1','Raw vocal',rawChip[0],rawChip[1],rawBody,null));
+
+      // Stage 2 — Cleaned vocal (client approves)
+      expand.appendChild(clientStage('2','Cleaned vocal',tr.cleaned,tr.audio.cleaned,'cleanedApproved','cleanedNote',
+        'Listen and approve the cleaned vocal, or ask for a fix.','I will clean the vocal here once the raw is accepted.'));
+
+      // Stage 3 — Suggested music (preview + optional note, no approval)
+      var musicChip = !tr.music ? ['lock','In progress'] : (s.musicSeen?['done','Previewed']:['await','Ready to preview']);
+      var musicInner=document.createElement('div');
+      if(tr.music){
+        musicInner.innerHTML = audioHtml(tr.audio.music) + '<div class="stage-actions"><button class="approve-btn" data-mus="1">'+(s.musicSeen?'Music looks good ✓':'Mark music as previewed')+'</button><button class="note-toggle">Add a note on the music</button></div>';
+        var mnote=document.createElement('textarea');mnote.className='note-box'+(s.musicNote?' open':'');mnote.placeholder='Any thoughts on the music? Optional.';mnote.value=s.musicNote||'';
+        musicInner.appendChild(mnote);
+        musicInner.querySelector('[data-mus]').addEventListener('click',function(){s.musicSeen=!s.musicSeen;save();rerender();});
+        musicInner.querySelector('.note-toggle').addEventListener('click',function(){mnote.classList.toggle('open');if(mnote.classList.contains('open'))mnote.focus();});
+        mnote.addEventListener('input',function(){s.musicNote=mnote.value.trim();save();refreshBar();});
+      }else{ musicInner.innerHTML='<div class="stage-body">The suggested music comes after you approve the vocal.</div>'; }
+      expand.appendChild(stageEl('3','Suggested music',musicChip[0],musicChip[1],null,musicInner));
+
+      // Stage 4 — Final (client approves)
+      expand.appendChild(clientStage('4','Final production',tr.final,tr.audio.final,'finalApproved','finalNote',
+        'Give your final approval, or leave a note.','The final production comes together after the music.'));
+    }
+
+    function clientStage(num,name,ready,audioFile,approveKey,noteKey,readyHint,lockHint){
+      var approved=!!s[approveKey];
+      var chip = !ready ? ['lock','In progress'] : (approved?['done','Approved']:['await','Awaiting you']);
+      var inner=document.createElement('div');
+      if(ready){
+        inner.innerHTML=audioHtml(audioFile)+'<div class="stage-body">'+readyHint+'</div><div class="stage-actions"><button class="approve-btn'+(approved?' on':'')+'">'+(approved?'Approved ✓':'Approve')+'</button><button class="note-toggle">Request a change</button></div>';
+        var nb=document.createElement('textarea');nb.className='note-box'+(s[noteKey]?' open':'');nb.placeholder='What would you like changed?';nb.value=s[noteKey]||'';
+        inner.appendChild(nb);
+        inner.querySelector('.approve-btn').addEventListener('click',function(){s[approveKey]=!s[approveKey];save();rerender();});
+        inner.querySelector('.note-toggle').addEventListener('click',function(){nb.classList.toggle('open');if(nb.classList.contains('open'))nb.focus();});
+        nb.addEventListener('input',function(){s[noteKey]=nb.value.trim();save();refreshBar();});
+      }else{ inner.innerHTML='<div class="stage-body">'+lockHint+'</div>'; }
+      return stageEl(num,name,chip[0],chip[1],null,inner);
+    }
+
+    function rerender(){
+      // rebuild this track element in place, then open it (build expand)
+      var fresh=trackEl(tr);
+      wrap.replaceWith(fresh);
+      fresh.querySelector('.row').click();
+      refreshBar();
+    }
+
+    return wrap;
+  }
+
+  function stageEl(num,name,chipCls,chipText,bodyHtml,innerNode){
+    var el=document.createElement('div');el.className='stage';
+    el.innerHTML='<div class="stage-head"><div class="stage-num">'+num+'</div><div class="stage-name">'+name+'</div><div class="stage-chip '+chipCls+'">'+chipText+'</div></div>'+(bodyHtml||'');
+    if(innerNode)el.appendChild(innerNode);
+    return el;
+  }
+  function audioHtml(f){return f?'<audio controls preload="none" src="audio/'+encodeURIComponent(f)+'"></audio>':'<div class="no-audio">Preview will be added here shortly.</div>';}
+
+  function countTracks(cat){return cat.subcategories?cat.subcategories.reduce(function(n,s){return n+s.tracks.length;},0):cat.tracks.length;}
+  function countFinal(cat){var list=flat(cat);return list.filter(function(t){return stOf(keyFor(t)).finalApproved;}).length;}
+  function flat(cat){return cat.subcategories?[].concat.apply([],cat.subcategories.map(function(s){return s.tracks;})):cat.tracks;}
+  function allTracks(){var out=[];D.categories.forEach(function(cat){if(cat.subcategories)cat.subcategories.forEach(function(s){s.tracks.forEach(function(t){out.push({t:t,cat:cat.name,sub:s.name});});});else cat.tracks.forEach(function(t){out.push({t:t,cat:cat.name,sub:null});});});return out;}
+
+  function refreshBar(){
+    var fin=0,voc=0,notes=0,total=0;
+    allTracks().forEach(function(x){total++;var s=stOf(keyFor(x.t));if(s.finalApproved)fin++;if(s.cleanedApproved)voc++;if(s.cleanedNote||s.finalNote||s.musicNote)notes++;});
+    document.getElementById('barStat').innerHTML='<b>'+fin+'</b> finalized · <b>'+voc+'</b> vocals approved · <b>'+notes+'</b> with notes';
+    var pct=total?Math.round(fin/total*100):0;
+    document.getElementById('sideProgress').innerHTML='<b>'+fin+'</b> of '+total+' finalized<div class="prog-track"><div class="prog-fill" style="width:'+pct+'%"></div></div>';
+  }
+  refreshBar();
+
+  document.getElementById('copyBtn').addEventListener('click',function(){
+    var lines=[D.client.project+' — my review','('+D.client.name+')',''],fin=[],voc=[],notes=[];
+    allTracks().forEach(function(x){
+      var s=stOf(keyFor(x.t)),loc=x.sub?x.cat+' / '+x.sub:x.cat,ttl=x.t.title;
+      if(s.finalApproved)fin.push('✓ '+ttl+' ('+loc+')');
+      else if(s.cleanedApproved)voc.push('• '+ttl+' — vocal approved ('+loc+')');
+      if(s.cleanedNote)notes.push('• '+ttl+' [vocal]: '+s.cleanedNote);
+      if(s.musicNote)notes.push('• '+ttl+' [music]: '+s.musicNote);
+      if(s.finalNote)notes.push('• '+ttl+' [final]: '+s.finalNote);
+    });
+    lines.push('FINAL APPROVED ('+fin.length+'):');lines=lines.concat(fin.length?fin:['(none yet)']);
+    lines.push('','VOCAL APPROVED, awaiting final ('+voc.length+'):');lines=lines.concat(voc.length?voc:['(none)']);
+    lines.push('','NOTES / CHANGES ('+notes.length+'):');lines=lines.concat(notes.length?notes:['(none)']);
+    var text=lines.join('\n'),btn=this;
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(function(){flash(btn);},function(){fb(text,btn);});else fb(text,btn);
+  });
+  function flash(btn){var o=btn.textContent;btn.textContent='Copied ✓ — paste into '+D.contact.method;btn.classList.add('done');setTimeout(function(){btn.textContent=o;btn.classList.remove('done');},2600);}
+  function fb(text,btn){var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');flash(btn);}catch(e){alert(text);}document.body.removeChild(ta);}
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];});}
+})();
+</script>
+</body>
+</html>
