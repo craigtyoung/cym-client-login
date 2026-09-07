@@ -143,6 +143,21 @@
   .toggle-lbl{font-size:12.5px;color:var(--ink);display:inline-flex;align-items:center;gap:6px;cursor:pointer}
   .uling{font-size:11.5px;color:var(--muted)}
 
+  /* Admin content editor */
+  .admin-add{margin:10px 4px 4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .add-btn{font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--navy);background:#fff;border:1px dashed var(--gold);padding:7px 13px;border-radius:9px}
+  .add-btn:hover{background:#fffdf9}
+  .add-form{margin:8px 4px 4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:#fffdf9;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .add-form input,.add-form select{font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px}
+  .add-form input.title{min-width:200px}
+  .cat-add-btn{font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer;color:var(--gold);background:none;border:none;text-decoration:underline;margin-left:10px}
+  .details-box{margin-top:10px;padding:12px;border:1px dashed var(--gold);border-radius:10px;background:#fffdf9}
+  .details-box .lbl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:8px}
+  .details-grid{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .details-grid input,.details-grid select{font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px}
+  .details-grid input.title{min-width:220px}
+  .danger-btn{font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;color:var(--alert);background:#fff;border:1px solid var(--alert);padding:6px 12px;border-radius:8px}
+
   .bar{position:fixed;bottom:0;left:262px;right:0;background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 20px rgba(24,33,53,.06);padding:12px 30px;z-index:30}
   .bar-inner{display:flex;align-items:center;gap:16px;max-width:1000px}
   .bar-stat{font-size:13.5px;color:var(--muted);font-weight:500}
@@ -298,24 +313,101 @@
   function render(){
     nav.innerHTML=''; host.innerHTML='';
     addNav('Overview','__all__',false);
-    eachCat(function(cat){
+    D.categories.forEach(function(cat, ci){
       var sec=document.createElement('section');sec.className='category';
       if(FILTER!=='__all__' && FILTER.split('::')[0]!==cat.name) sec.style.display='none';
       var head=document.createElement('div');head.className='cat-head';
       head.innerHTML='<div class="cat-name">'+esc(cat.name)+'</div>'+(cat.subtitle?'<div class="cat-sub">'+esc(cat.subtitle)+'</div>':'')+'<div class="cat-count">'+catTracks(cat).length+' pieces</div>';
+      if(ROLE==='admin' && cat.subcategories){
+        var asb=document.createElement('button');asb.className='cat-add-btn';asb.textContent='+ sacred text';
+        asb.addEventListener('click',function(){ addSubFlow(ci); });
+        head.querySelector('.cat-count').appendChild(asb);
+      }
       sec.appendChild(head);
       if(cat.subcategories){
-        cat.subcategories.forEach(function(sub){
+        cat.subcategories.forEach(function(sub, si){
           var showSub = FILTER==='__all__' || FILTER===cat.name || FILTER===cat.name+'::'+sub.name;
           var block=document.createElement('div'); if(!showSub) block.style.display='none';
           var lbl=document.createElement('div');lbl.className='subcat';lbl.textContent=sub.name+'  ·  '+sub.tracks.length+' pieces';
-          block.appendChild(lbl);block.appendChild(listEl(sub.tracks));sec.appendChild(block);
+          block.appendChild(lbl);block.appendChild(listEl(sub.tracks));
+          if(ROLE==='admin') block.appendChild(addTrackControl(ci, si));
+          sec.appendChild(block);
         });
-      }else{ sec.appendChild(listEl(cat.tracks)); }
+      }else{
+        sec.appendChild(listEl(cat.tracks));
+        if(ROLE==='admin') sec.appendChild(addTrackControl(ci, null));
+      }
       host.appendChild(sec);
       addNav(cat.name,cat.name,false,catTracks(cat).length);
       if(cat.subcategories) cat.subcategories.forEach(function(sub){ addNav(sub.name,cat.name+'::'+sub.name,true,sub.tracks.length); });
     });
+    if(ROLE==='admin') host.appendChild(addCollectionControl());
+  }
+
+  // ---- admin content-editor controls ----
+  function addTrackControl(ci, si){
+    var wrap=document.createElement('div');wrap.className='admin-add';
+    var btn=document.createElement('button');btn.className='add-btn';btn.textContent='+ Add piece';
+    wrap.appendChild(btn);
+    btn.addEventListener('click',function(){
+      if(wrap.querySelector('.add-form')) return;
+      var form=document.createElement('div');form.className='add-form';
+      form.innerHTML='<input class="title" placeholder="Piece title" />'
+        +'<select class="ind"><option value="no">No induction</option><option value="yes">Induction</option></select>'
+        +'<input class="end" placeholder="End music (optional)" style="max-width:150px" />'
+        +'<button class="mini-btn" data-save>Add</button><button class="mini-btn ghost" data-cancel>Cancel</button>';
+      wrap.appendChild(form);
+      var ti=form.querySelector('.title'); ti.focus();
+      form.querySelector('[data-cancel]').addEventListener('click',function(){ form.remove(); });
+      function submit(){ var t=ti.value.trim(); if(!t){ti.focus();return;} api('POST','/api/track-add',{catIndex:ci,subIndex:si,title:t,induction:form.querySelector('.ind').value,endMusic:form.querySelector('.end').value.trim()}).then(reloadKeepOpen); }
+      form.querySelector('[data-save]').addEventListener('click',submit);
+      ti.addEventListener('keydown',function(e){ if(e.key==='Enter') submit(); });
+    });
+    return wrap;
+  }
+  function addSubFlow(ci){
+    var name=prompt('Name of the new sacred text / sub-collection:');
+    if(name && name.trim()) api('POST','/api/subcategory-add',{catIndex:ci,name:name.trim()}).then(reloadKeepOpen);
+  }
+  function addCollectionControl(){
+    var wrap=document.createElement('div');wrap.className='admin-add';
+    var btn=document.createElement('button');btn.className='add-btn';btn.textContent='+ Add collection';
+    wrap.appendChild(btn);
+    btn.addEventListener('click',function(){
+      if(wrap.querySelector('.add-form')) return;
+      var form=document.createElement('div');form.className='add-form';
+      form.innerHTML='<input class="title" placeholder="Collection name" />'
+        +'<input class="sub" placeholder="Subtitle (optional)" style="max-width:180px" />'
+        +'<select class="kind"><option value="leaf">Holds pieces directly</option><option value="parent">Holds sacred texts (sub-collections)</option></select>'
+        +'<button class="mini-btn" data-save>Add</button><button class="mini-btn ghost" data-cancel>Cancel</button>';
+      wrap.appendChild(form);
+      var ni=form.querySelector('.title'); ni.focus();
+      form.querySelector('[data-cancel]').addEventListener('click',function(){ form.remove(); });
+      function submit(){ var n=ni.value.trim(); if(!n){ni.focus();return;} api('POST','/api/category-add',{name:n,subtitle:form.querySelector('.sub').value.trim(),kind:form.querySelector('.kind').value}).then(reloadKeepOpen); }
+      form.querySelector('[data-save]').addEventListener('click',submit);
+      ni.addEventListener('keydown',function(e){ if(e.key==='Enter') submit(); });
+    });
+    return wrap;
+  }
+  function detailsEditor(tr){
+    var box=document.createElement('div');box.className='details-box';
+    box.innerHTML='<div class="lbl">Piece details</div>'
+      +'<div class="details-grid">'
+      +'<input class="title" placeholder="Title" value="'+esc(tr.title)+'" />'
+      +'<select class="ind"><option value="no">No induction</option><option value="yes">Induction</option></select>'
+      +'<input class="end" placeholder="End music" style="max-width:150px" value="'+esc(tr.endMusic||'')+'" />'
+      +'<button class="mini-btn" data-save>Save</button>'
+      +'<button class="danger-btn" data-del>Remove piece</button>'
+      +'</div>'
+      +'<input data-note placeholder="Internal note (optional)" style="margin-top:8px;width:100%;font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px" value="'+esc(tr.note||'')+'" />';
+    box.querySelector('.ind').value = tr.induction==='yes'?'yes':'no';
+    box.querySelector('[data-save]').addEventListener('click',function(){
+      api('POST','/api/track/'+tr.id,{ title:box.querySelector('.title').value.trim()||tr.title, induction:box.querySelector('.ind').value, endMusic:box.querySelector('.end').value.trim(), note:box.querySelector('[data-note]').value.trim() }).then(reloadKeepOpen);
+    });
+    box.querySelector('[data-del]').addEventListener('click',function(){
+      if(confirm('Remove "'+tr.title+'"? This deletes the piece and any uploaded audio for it.')) api('POST','/api/track-delete',{id:tr.id}).then(function(){ openIds[tr.id]=0; reloadKeepOpen(); });
+    });
+    return box;
   }
   function addNav(label,filter,isSub,count){
     var b=document.createElement('button');
@@ -353,6 +445,8 @@
   function buildExpand(tr,expand){
     expand.innerHTML='';
     var a=appr(tr.id);
+
+    if(ROLE==='admin') expand.appendChild(detailsEditor(tr));
 
     // Stage 1 — Raw
     var rawChip=tr.raw==='accepted'?['done','Accepted']:(tr.raw==='rerecord'?['alert','Re-record']:['lock','Received']);

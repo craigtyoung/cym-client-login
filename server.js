@@ -31,6 +31,36 @@ function findTrack(data, id){
   eachTrack(data, function(tr){ if(tr.id===id) found=tr; });
   return found;
 }
+function allIds(data){ var ids=[]; eachTrack(data, function(t){ ids.push(t.id); }); return ids; }
+function uniqueId(data, title){
+  var base = slug(title) || 'piece', id = base, i = 2, ids = allIds(data);
+  while(ids.indexOf(id) >= 0){ id = base + '-' + (i++); }
+  return id;
+}
+function listAt(data, catIndex, subIndex){
+  var cat = data.categories[catIndex]; if(!cat) return null;
+  if(cat.subcategories){ var sub = cat.subcategories[subIndex]; return sub ? sub.tracks : null; }
+  return cat.tracks || null;
+}
+function removeTrackById(data, id){
+  var removed = null;
+  data.categories.forEach(function(cat){
+    var lists = cat.subcategories ? cat.subcategories.map(function(s){ return s.tracks; }) : [cat.tracks];
+    lists.forEach(function(list){
+      var i = list.findIndex(function(t){ return t.id === id; });
+      if(i >= 0) removed = list.splice(i,1)[0];
+    });
+  });
+  return removed;
+}
+function newTrack(data, title, induction, endMusic, raw){
+  return {
+    id: uniqueId(data, title), title: String(title).slice(0,200),
+    induction: induction || 'no', endMusic: endMusic || 'TBD', note: '',
+    raw: raw || 'received', cleaned:false, music:false, final:false,
+    audio: { cleaned:'', music:'', final:'' }
+  };
+}
 
 // ---------- seed on first run ----------
 function seedData(){
@@ -135,8 +165,46 @@ app.post('/api/track/:id', requireAdmin, function(req,res){
   const p = req.body||{};
   ['raw'].forEach(function(k){ if(p[k]!=null) tr[k]=p[k]; });
   ['cleaned','music','final'].forEach(function(k){ if(p[k]!=null) tr[k]=!!p[k]; });
+  if(p.title!=null) tr.title = String(p.title).slice(0,200);
   ['induction','endMusic','note'].forEach(function(k){ if(p[k]!=null) tr[k]=String(p[k]).slice(0,300); });
   saveData(DATA); res.json({ok:true, track:tr});
+});
+
+// ---- admin content editor ----
+app.post('/api/track-add', requireAdmin, function(req,res){
+  const {catIndex, subIndex, title, induction, endMusic, raw} = req.body||{};
+  if(!title || !String(title).trim()) return res.status(400).json({error:'title required'});
+  const list = listAt(DATA, catIndex, subIndex);
+  if(!list) return res.status(400).json({error:'bad location'});
+  const tr = newTrack(DATA, String(title).trim(), induction, endMusic, raw);
+  list.push(tr); saveData(DATA); res.json({ok:true, track:tr});
+});
+app.post('/api/track-delete', requireAdmin, function(req,res){
+  const id = (req.body||{}).id;
+  const removed = removeTrackById(DATA, id);
+  if(!removed) return res.status(404).json({error:'no track'});
+  delete DATA.approvals[id];
+  // best-effort remove its audio files
+  ['cleaned','music','final'].forEach(function(stage){
+    var f = removed.audio && removed.audio[stage];
+    if(f){ try{ fs.unlinkSync(path.join(AUDIO_DIR, f)); }catch(e){} }
+  });
+  saveData(DATA); res.json({ok:true});
+});
+app.post('/api/category-add', requireAdmin, function(req,res){
+  const {name, subtitle, kind} = req.body||{};
+  if(!name || !String(name).trim()) return res.status(400).json({error:'name required'});
+  const cat = { name: String(name).trim(), subtitle: String(subtitle||'').slice(0,140) };
+  if(kind === 'parent') cat.subcategories = []; else cat.tracks = [];
+  DATA.categories.push(cat); saveData(DATA); res.json({ok:true});
+});
+app.post('/api/subcategory-add', requireAdmin, function(req,res){
+  const {catIndex, name} = req.body||{};
+  const cat = DATA.categories[catIndex];
+  if(!cat || !cat.subcategories) return res.status(400).json({error:'category has no sub-collections'});
+  if(!name || !String(name).trim()) return res.status(400).json({error:'name required'});
+  cat.subcategories.push({ name: String(name).trim(), tracks: [] });
+  saveData(DATA); res.json({ok:true});
 });
 
 const upload = multer({
