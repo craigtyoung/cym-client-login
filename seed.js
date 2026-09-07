@@ -13,7 +13,7 @@ function t(title, raw, cleaned, music, final, induction, note){
     cleaned: !!cleaned,       // stage ready-for-client flags
     music: !!music,
     final: !!final,
-    audio: { cleaned:"", music:"", final:"" }
+    audio: { raw:"", cleaned:"", music:"", final:"" }
   };
 }
 

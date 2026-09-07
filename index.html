@@ -157,6 +157,8 @@
   .details-grid input,.details-grid select{font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px}
   .details-grid input.title{min-width:220px}
   .danger-btn{font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;color:var(--alert);background:#fff;border:1px solid var(--alert);padding:6px 12px;border-radius:8px}
+  .upload-box{margin-top:10px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fbfbfd}
+  .upload-box .ulbl{font-size:11.5px;font-weight:600;color:var(--ink);margin-bottom:8px}
 
   .bar{position:fixed;bottom:0;left:262px;right:0;background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 20px rgba(24,33,53,.06);padding:12px 30px;z-index:30}
   .bar-inner{display:flex;align-items:center;gap:16px;max-width:1000px}
@@ -320,7 +322,17 @@
       head.innerHTML='<div class="cat-name">'+esc(cat.name)+'</div>'+(cat.subtitle?'<div class="cat-sub">'+esc(cat.subtitle)+'</div>':'')+'<div class="cat-count">'+catTracks(cat).length+' pieces</div>';
       if(ROLE==='admin' && cat.subcategories){
         var asb=document.createElement('button');asb.className='cat-add-btn';asb.textContent='+ sacred text';
-        asb.addEventListener('click',function(){ addSubFlow(ci); });
+        asb.addEventListener('click',function(){
+          if(sec.querySelector('.subadd-form')) return;
+          var f=document.createElement('div');f.className='add-form subadd-form';
+          f.innerHTML='<input class="title" placeholder="Sacred text / sub-collection name" /><button class="mini-btn" data-save>Add</button><button class="mini-btn ghost" data-cancel>Cancel</button>';
+          head.insertAdjacentElement('afterend', f);
+          var ni=f.querySelector('.title'); ni.focus();
+          f.querySelector('[data-cancel]').addEventListener('click',function(){ f.remove(); });
+          function sub(){ var n=ni.value.trim(); if(!n){ni.focus();return;} api('POST','/api/subcategory-add',{catIndex:ci,name:n}).then(reloadKeepOpen); }
+          f.querySelector('[data-save]').addEventListener('click',sub);
+          ni.addEventListener('keydown',function(e){ if(e.key==='Enter') sub(); });
+        });
         head.querySelector('.cat-count').appendChild(asb);
       }
       sec.appendChild(head);
@@ -365,9 +377,20 @@
     });
     return wrap;
   }
-  function addSubFlow(ci){
-    var name=prompt('Name of the new sacred text / sub-collection:');
-    if(name && name.trim()) api('POST','/api/subcategory-add',{catIndex:ci,name:name.trim()}).then(reloadKeepOpen);
+  // reusable upload control (used for the Raw stage — client submits their recording)
+  function uploadRow(tr, stage, label){
+    var box=document.createElement('div');box.className='upload-box';
+    var cur = tr.audio && tr.audio[stage];
+    box.innerHTML='<div class="ulbl">'+esc(label)+'</div><div class="admin-row"><input type="file" accept="audio/*" data-file><button class="mini-btn" data-up>Upload</button><span class="uling">'+(cur?('current: '+esc(cur)):'no file yet')+'</span></div>';
+    var fi=box.querySelector('[data-file]'), ub=box.querySelector('[data-up]');
+    ub.addEventListener('click',function(){
+      if(!fi.files||!fi.files[0]) return;
+      ub.disabled=true; ub.textContent='Uploading…';
+      var fd=new FormData(); fd.append('file',fi.files[0]); fd.append('trackId',tr.id); fd.append('stage',stage);
+      fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){ if(j.error) throw j; reloadKeepOpen(); })
+        .catch(function(){ ub.disabled=false; ub.textContent='Upload'; alert('Upload failed'); });
+    });
+    return box;
   }
   function addCollectionControl(){
     var wrap=document.createElement('div');wrap.className='admin-add';
@@ -451,8 +474,14 @@
     // Stage 1 — Raw
     var rawChip=tr.raw==='accepted'?['done','Accepted']:(tr.raw==='rerecord'?['alert','Re-record']:['lock','Received']);
     var s1=stageEl('1','Raw vocal',rawChip[0],rawChip[1]);
-    if(tr.raw==='rerecord') s1.insertAdjacentHTML('beforeend','<div class="rerecord-banner">This recording needs to be re-recorded before it can go into production.</div>');
-    else s1.insertAdjacentHTML('beforeend','<div class="stage-body">'+(tr.raw==='accepted'?'Recording is in and accepted for production.':'Recording is in, awaiting review.')+'</div>');
+    if(tr.raw==='rerecord') s1.insertAdjacentHTML('beforeend','<div class="rerecord-banner">This recording needs to be re-recorded. Please record again and upload it below.</div>');
+    else {
+      var rawMsg = tr.raw==='accepted' ? 'Recording is in and accepted for production.'
+                 : (ROLE==='client' ? 'Upload your recording here so it can go into production.' : 'Recording is in, awaiting your review.');
+      s1.insertAdjacentHTML('beforeend','<div class="stage-body">'+rawMsg+'</div>');
+    }
+    if(tr.audio && tr.audio.raw) s1.insertAdjacentHTML('beforeend', audioHtml(tr.audio.raw));
+    s1.appendChild(uploadRow(tr,'raw', ROLE==='client' ? (tr.raw==='rerecord'?'Re-record and upload':'Upload your recording') : "Upload raw recording (on client's behalf)"));
     if(ROLE==='admin'){
       var ab=document.createElement('div');ab.className='admin-box';
       ab.innerHTML='<div class="lbl">Admin</div><div class="admin-row">Raw status: <select data-raw><option value="received">Received</option><option value="accepted">Accepted</option><option value="rerecord">Needs re-record</option></select></div>';

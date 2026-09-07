@@ -58,7 +58,7 @@ function newTrack(data, title, induction, endMusic, raw){
     id: uniqueId(data, title), title: String(title).slice(0,200),
     induction: induction || 'no', endMusic: endMusic || 'TBD', note: '',
     raw: raw || 'received', cleaned:false, music:false, final:false,
-    audio: { cleaned:'', music:'', final:'' }
+    audio: { raw:'', cleaned:'', music:'', final:'' }
   };
 }
 
@@ -214,18 +214,24 @@ const upload = multer({
   }),
   limits: { fileSize: 120*1024*1024 } // 120MB
 });
-app.post('/api/upload', requireAdmin, upload.single('file'), function(req,res){
+app.post('/api/upload', requireAuth, upload.single('file'), function(req,res){
   const {trackId, stage} = req.body||{};
-  if(['cleaned','music','final'].indexOf(stage)<0){ if(req.file) fs.unlinkSync(req.file.path); return res.status(400).json({error:'bad stage'}); }
+  const cleanup = function(){ if(req.file){ try{ fs.unlinkSync(req.file.path); }catch(e){} } };
+  if(['raw','cleaned','music','final'].indexOf(stage)<0){ cleanup(); return res.status(400).json({error:'bad stage'}); }
+  // client may only upload the RAW recording; producing stages are admin-only
+  if(stage!=='raw' && req.role!=='admin'){ cleanup(); return res.status(403).json({error:'admin only for this stage'}); }
   const tr = findTrack(DATA, trackId);
-  if(!tr){ if(req.file) fs.unlinkSync(req.file.path); return res.status(404).json({error:'no track'}); }
+  if(!tr){ cleanup(); return res.status(404).json({error:'no track'}); }
   if(!req.file) return res.status(400).json({error:'no file'});
   const ext = path.extname(req.file.originalname||'.mp3') || '.mp3';
   const finalName = trackId+'-'+stage+ext;
   const dest = path.join(AUDIO_DIR, finalName);
   try{ if(fs.existsSync(dest)) fs.unlinkSync(dest); fs.renameSync(req.file.path, dest); }
   catch(e){ return res.status(500).json({error:'save failed'}); }
-  tr.audio[stage] = finalName; tr[stage] = true;   // uploading a stage marks it ready
+  if(!tr.audio) tr.audio={};
+  tr.audio[stage] = finalName;
+  if(stage==='raw'){ if(req.role==='client') tr.raw='received'; } // client (re)submission returns it to your review
+  else { tr[stage] = true; }                                     // producing a stage marks it ready for the client
   saveData(DATA); res.json({ok:true, file:finalName, track:tr});
 });
 
