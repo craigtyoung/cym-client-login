@@ -200,6 +200,11 @@
   .di-title{font-weight:600;color:var(--ink)}
   .di-sub{color:var(--muted);font-size:12px;margin-top:2px}
   .dash-empty{font-size:13px;color:var(--muted);padding:6px 0}
+  .ph-badge{display:inline-block;margin-top:12px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);background:var(--await-bg);padding:5px 11px;border-radius:20px}
+  .acct-form{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:8px}
+  .acct-form input{font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;min-width:200px}
+  .acct-msg{font-size:12.5px;margin-top:10px;min-height:16px}
+  .acct-msg.err{color:var(--alert)} .acct-msg.ok{color:var(--done)}
 
   @media (max-width:860px){
     .sidebar{display:none}.main{margin-left:0;padding:18px 14px 110px}.bar{left:0}
@@ -239,7 +244,6 @@
           <div class="side-client" id="sideClient"></div>
           <div class="side-proj" id="sideProj"></div>
         </div>
-        <div class="nav-sec-label">Collections</div>
         <nav id="nav"></nav>
         <div class="side-progress" id="sideProgress"></div>
       </aside>
@@ -368,13 +372,24 @@
   var nav=document.getElementById('nav'), host=document.getElementById('categories');
   function render(){
     nav.innerHTML=''; host.innerHTML='';
-    var isDash = (FILTER==='__dash__' && vr()==='admin');
-    if(vr()==='admin') addNav('Dashboard','__dash__',false);
-    addNav('Overview','__all__',false);
-    if(isDash) renderDashboard();
+    var isAdmin = vr()==='admin';
+    var special = (SPECIAL[FILTER] && (isAdmin || FILTER==='__account__')) ? SPECIAL[FILTER] : null;
+    if(isAdmin){
+      addNavLabel('Workspace');
+      addNav('Dashboard','__dash__',false);
+      addNav('Production queue','__queue__',false);
+      addNav('Approvals & notes','__approvals__',false);
+      addNav('Deliverables','__deliverables__',false);
+      addNavLabel('Catalogue');
+      addNav('Overview','__all__',false);
+    }else{
+      addNavLabel('Collections');
+      addNav('Overview','__all__',false);
+    }
+    if(special) special();
     D.categories.forEach(function(cat, ci){
       var sec=document.createElement('section');sec.className='category';
-      if(isDash) sec.style.display='none';
+      if(special) sec.style.display='none';
       else if(FILTER!=='__all__' && FILTER.split('::')[0]!==cat.name) sec.style.display='none';
       var head=document.createElement('div');head.className='cat-head';
       head.innerHTML='<div class="cat-name">'+esc(cat.name)+'</div>'+(cat.subtitle?'<div class="cat-sub">'+esc(cat.subtitle)+'</div>':'')+'<div class="cat-count">'+catTracks(cat).length+' pieces</div>';
@@ -411,7 +426,54 @@
       addNav(cat.name,cat.name,false,catTracks(cat).length);
       if(cat.subcategories) cat.subcategories.forEach(function(sub){ addNav(sub.name,cat.name+'::'+sub.name,true,sub.tracks.length); });
     });
-    if(!isDash && vr()==='admin') host.appendChild(addCollectionControl());
+    if(isAdmin){
+      addNavLabel('Manage');
+      addNav('Clients','__clients__',false);
+      addNav('Billing','__billing__',false);
+      addNav('Settings','__settings__',false);
+      addNav('Account & security','__account__',false);
+    }else{
+      addNavLabel('Account');
+      addNav('Account & security','__account__',false);
+    }
+    if(!special && isAdmin) host.appendChild(addCollectionControl());
+  }
+
+  function addNavLabel(text){ var d=document.createElement('div');d.className='nav-sec-label';d.textContent=text;nav.appendChild(d); }
+
+  // special (non-catalogue) views. Placeholders are the framework to build into.
+  var SPECIAL = {
+    '__dash__': renderDashboard,
+    '__queue__': function(){ placeholder('Production queue','A pipeline view across every piece — what’s in raw, cleaning, music, final and artwork, and what’s next in line to produce.'); },
+    '__approvals__': function(){ placeholder('Approvals & notes','Every client approval and change request in one running list, filterable by piece and stage.'); },
+    '__deliverables__': function(){ placeholder('Deliverables','Final approved audio + covers, ready to hand off — download or export per collection.'); },
+    '__clients__': function(){ placeholder('Clients','Your client list — switch between clients, add a new one, set each project’s name, catalogue and access. The multi-client foundation.'); },
+    '__billing__': function(){ placeholder('Billing','Per-recording rates and founding rates, what’s been invoiced, and what’s paid.'); },
+    '__settings__': function(){ placeholder('Settings','Brand, project name, intro copy, and client-facing options for this client.'); },
+    '__account__': renderAccount
+  };
+  function placeholder(title,desc){
+    var w=document.createElement('div');w.className='dash-sec';
+    w.innerHTML='<h3>'+esc(title)+'</h3><div class="sec-note">'+esc(desc)+'</div><span class="ph-badge">Framework · in development</span>';
+    host.appendChild(w);
+  }
+  function renderAccount(){
+    var who = vr()==='admin' ? 'admin' : 'client';
+    var w=document.createElement('div');w.className='dash-sec';
+    w.innerHTML='<h3>Account &amp; security</h3>'
+      +'<div class="sec-note">Change the '+who+' access code for this site. The code set on the server always works as a recovery fallback, so you can’t get locked out.</div>'
+      +'<div class="acct-form"><input type="password" id="acCode1" placeholder="New access code (min 4 chars)" autocomplete="new-password" /><input type="password" id="acCode2" placeholder="Confirm new code" autocomplete="new-password" /><button class="mini-btn" id="acSave">Update code</button></div>'
+      +'<div class="acct-msg" id="acMsg"></div>';
+    host.appendChild(w);
+    var i1=document.getElementById('acCode1'), i2=document.getElementById('acCode2'), btn=document.getElementById('acSave'), msg=document.getElementById('acMsg');
+    if(PREVIEW){ i1.disabled=true;i2.disabled=true;btn.disabled=true;msg.textContent='Read-only in preview.'; return; }
+    btn.addEventListener('click',function(){
+      var c1=i1.value.trim(), c2=i2.value.trim();
+      if(c1.length<4){ msg.className='acct-msg err'; msg.textContent='At least 4 characters.'; return; }
+      if(c1!==c2){ msg.className='acct-msg err'; msg.textContent='Codes do not match.'; return; }
+      api('POST','/api/change-code',{newCode:c1}).then(function(){ msg.className='acct-msg ok'; msg.textContent='Updated. Use the new code next time you log in.'; i1.value='';i2.value=''; })
+        .catch(function(e){ msg.className='acct-msg err'; msg.textContent=(e&&e.error)||'Update failed.'; });
+    });
   }
 
   // ---- admin dashboard (basic) ----

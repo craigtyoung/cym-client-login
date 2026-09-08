@@ -73,6 +73,7 @@ function normalizeData(data){
     if('endMusic' in tr){ delete tr.endMusic; changed=true; }
   });
   if(!data.approvals){ data.approvals={}; changed=true; }
+  if(!data.auth){ data.auth={}; changed=true; }
   return changed;
 }
 
@@ -125,6 +126,14 @@ function parseCookies(req){
 function roleOf(req){ const sid=parseCookies(req).sid; return sid && sessions[sid] ? sessions[sid] : null; }
 function requireAuth(req,res,next){ const r=roleOf(req); if(!r) return res.status(401).json({error:'not logged in'}); req.role=r; next(); }
 function requireAdmin(req,res,next){ if(roleOf(req)!=='admin') return res.status(403).json({error:'admin only'}); next(); }
+// self-service access codes (hashed). Env ADMIN_CODE/CLIENT_CODE always work as a recovery fallback.
+function hashCode(code){ const salt=crypto.randomBytes(16).toString('hex'); return salt+':'+crypto.scryptSync(String(code),salt,32).toString('hex'); }
+function verifyCode(code, stored){
+  if(!stored||!code) return false;
+  const parts=String(stored).split(':'); if(parts.length!==2) return false;
+  const h=crypto.scryptSync(String(code),parts[0],32).toString('hex');
+  try{ return crypto.timingSafeEqual(Buffer.from(h,'hex'),Buffer.from(parts[1],'hex')); }catch(e){ return false; }
+}
 
 // ---------- app ----------
 const app = express();
@@ -133,8 +142,8 @@ app.use(express.json());
 app.post('/api/login', function(req,res){
   const code = (req.body && req.body.code || '').trim();
   let role=null;
-  if(code === ADMIN_CODE) role='admin';
-  else if(code === CLIENT_CODE) role='client';
+  if(code === ADMIN_CODE || verifyCode(code, DATA.auth && DATA.auth.adminHash)) role='admin';
+  else if(code === CLIENT_CODE || verifyCode(code, DATA.auth && DATA.auth.clientHash)) role='client';
   if(!role) return res.status(401).json({error:'Incorrect access code'});
   const token = crypto.randomBytes(24).toString('hex');
   sessions[token]=role;
@@ -146,6 +155,14 @@ app.post('/api/logout', function(req,res){
   const sid=parseCookies(req).sid; if(sid) delete sessions[sid];
   res.setHeader('Set-Cookie','sid=; HttpOnly; Path=/; Max-Age=0');
   res.json({ok:true});
+});
+// change your own role's access code (persisted, hashed). Env code still works as recovery.
+app.post('/api/change-code', requireAuth, function(req,res){
+  const nc=(req.body && req.body.newCode || '').trim();
+  if(nc.length<4) return res.status(400).json({error:'Code must be at least 4 characters'});
+  if(!DATA.auth) DATA.auth={};
+  DATA.auth[req.role+'Hash']=hashCode(nc);
+  saveData(DATA); res.json({ok:true});
 });
 
 // full data (both roles). client gets same catalogue; role tells UI what to show.
