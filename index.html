@@ -36,6 +36,9 @@
   .app{display:none}
   .topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar-h);background:var(--navy);display:flex;align-items:center;justify-content:space-between;padding:0 24px;z-index:40;border-bottom:1px solid rgba(255,255,255,.06)}
   .tb-logo{height:52px;width:auto;display:block}
+  .tb-left{display:flex;align-items:center;gap:12px}
+  .nav-toggle{font-size:18px;line-height:1;cursor:pointer;color:#aeb6c9;background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:9px;padding:6px 11px;font-family:inherit}
+  .nav-toggle:hover{color:#fff;border-color:rgba(255,255,255,.35)}
   .tb-right{display:flex;align-items:center;gap:14px}
   .role-badge{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:5px 11px;border-radius:20px}
   .role-badge.admin{color:#0e1626;background:var(--gold-2)}
@@ -206,8 +209,17 @@
   .acct-msg{font-size:12.5px;margin-top:10px;min-height:16px}
   .acct-msg.err{color:var(--alert)} .acct-msg.ok{color:var(--done)}
 
+  /* Collapsible sidebar */
+  .sidebar{transition:transform .25s ease}
+  .main{transition:margin-left .25s ease}
+  .bar{transition:left .25s ease}
+  body.nav-collapsed .sidebar{transform:translateX(-100%)}
+  body.nav-collapsed .main{margin-left:0}
+  body.nav-collapsed .bar{left:0}
+
   @media (max-width:860px){
-    .sidebar{display:none}.main{margin-left:0;padding:18px 14px 110px}.bar{left:0}
+    .sidebar{display:block;z-index:45;box-shadow:2px 0 24px rgba(0,0,0,.18)}
+    .main{margin-left:0;padding:18px 14px 110px}.bar{left:0}
     .step{width:52px}.step::before{width:52px;left:-26px}.step .slabel{display:none}
   }
 </style>
@@ -228,7 +240,10 @@
   <!-- App -->
   <div class="app" id="app">
     <div class="topbar">
-      <img class="tb-logo" id="logo" alt="Craig Young Music" />
+      <div class="tb-left">
+        <button class="nav-toggle" id="sideToggle" aria-label="Toggle menu" title="Show / hide menu">☰</button>
+        <img class="tb-logo" id="logo" alt="Craig Young Music" />
+      </div>
       <div class="tb-right">
         <button class="view-toggle" id="viewToggle" style="display:none">View as client</button>
         <span class="role-badge" id="roleBadge"></span>
@@ -327,6 +342,10 @@
       syncViewChrome(); render(); refreshBar();
       window.scrollTo({top:0,behavior:'smooth'});
     };
+    var navOpen = window.innerWidth > 860;
+    function applyNav(){ document.body.classList.toggle('nav-collapsed', !navOpen); }
+    document.getElementById('sideToggle').onclick=function(){ navOpen=!navOpen; applyNav(); };
+    applyNav();
     syncViewChrome();
   }
   function syncViewChrome(){
