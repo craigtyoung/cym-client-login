@@ -328,13 +328,7 @@
   function initChrome(){
     var logo=document.getElementById('logo');
     if(D.brand.logoSrc) logo.src=D.brand.logoSrc; else logo.style.display='none';
-    document.getElementById('sideClient').textContent=D.client.name;
-    document.getElementById('sideProj').textContent=D.client.project;
-    document.getElementById('ibTitle').textContent=D.client.project;
-    document.getElementById('ibSub').textContent='Prepared for '+D.client.name+'  ·  produced by '+D.client.preparedBy;
-    document.getElementById('ibIntro').textContent=D.client.intro;
-    document.getElementById('copyBtn').textContent=D.contact&&D.contact.label?D.contact.label:'Copy my approvals to send to Craig';
-    document.getElementById('previewBanner').textContent='Previewing as '+D.client.name+' — exactly what the client sees. Read-only: to actually approve or request a change, log in with the client code.';
+    applyProjectChrome();
     var vt=document.getElementById('viewToggle');
     vt.onclick=function(){
       PREVIEW=!PREVIEW;
@@ -348,10 +342,20 @@
     applyNav();
     syncViewChrome();
   }
+  // reads from D.project (the active/own project) — re-run after any project switch or edit
+  function applyProjectChrome(){
+    document.getElementById('sideClient').textContent=D.client.name;
+    document.getElementById('sideProj').textContent=D.project.name;
+    document.getElementById('ibTitle').textContent=D.project.name;
+    document.getElementById('ibSub').textContent='Prepared for '+D.client.name+'  ·  produced by '+(D.project.preparedBy||'Craig Young');
+    document.getElementById('ibIntro').textContent=D.project.intro||'';
+    document.getElementById('copyBtn').textContent=(D.contact&&D.contact.label)?D.contact.label:'Copy my approvals to send to Craig';
+    document.getElementById('previewBanner').textContent='Previewing as '+D.client.name+' — exactly what the client sees. Read-only: to actually approve or request a change, log in with the client code.';
+  }
   function syncViewChrome(){
     var showRole=vr(), badge=document.getElementById('roleBadge');
     badge.className='role-badge '+(showRole==='admin'?'admin':'client');
-    badge.textContent = showRole==='admin' ? 'Admin · '+D.client.preparedBy : (PREVIEW?'Client view':'Client');
+    badge.textContent = showRole==='admin' ? 'Admin · '+(D.project.preparedBy||'Craig Young') : (PREVIEW?'Client view':'Client');
     document.getElementById('adminHint').style.display = showRole==='admin'?'inline-block':'none';
     var vt=document.getElementById('viewToggle');
     vt.style.display = ROLE==='admin' ? 'inline-block' : 'none';
@@ -466,9 +470,9 @@
     '__queue__': function(){ placeholder('Production queue','A pipeline view across every piece — what’s in raw, cleaning, music, final and artwork, and what’s next in line to produce.'); },
     '__approvals__': function(){ placeholder('Approvals & notes','Every client approval and change request in one running list, filterable by piece and stage.'); },
     '__deliverables__': function(){ placeholder('Deliverables','Final approved audio + covers, ready to hand off — download or export per collection.'); },
-    '__clients__': function(){ placeholder('Clients','Your client list — switch between clients, add a new one, set each project’s name, catalogue and access. The multi-client foundation.'); },
+    '__clients__': renderClients,
     '__billing__': function(){ placeholder('Billing','Per-recording rates and founding rates, what’s been invoiced, and what’s paid.'); },
-    '__settings__': function(){ placeholder('Settings','Brand, project name, intro copy, and client-facing options for this client.'); },
+    '__settings__': renderSettings,
     '__account__': renderAccount
   };
   function placeholder(title,desc){
@@ -492,6 +496,75 @@
       if(c1!==c2){ msg.className='acct-msg err'; msg.textContent='Codes do not match.'; return; }
       api('POST','/api/change-code',{newCode:c1}).then(function(){ msg.className='acct-msg ok'; msg.textContent='Updated. Use the new code next time you log in.'; i1.value='';i2.value=''; })
         .catch(function(e){ msg.className='acct-msg err'; msg.textContent=(e&&e.error)||'Update failed.'; });
+    });
+  }
+
+  // ---- Clients & projects (admin) ----
+  function renderClients(){
+    var wrap=document.createElement('div');
+    var head=document.createElement('div');head.className='dash-sec';
+    head.innerHTML='<h3>Clients &amp; projects</h3><div class="sec-note">Each project is its own client-facing preview — its own access code, catalogue and approvals. Open a project to make it active, or set its client code to hand out a link.</div>'
+      +'<div class="acct-form"><input id="ncName" placeholder="New client name" /><button class="mini-btn" id="ncAdd">Add client</button></div><div class="acct-msg" id="ncMsg"></div>';
+    wrap.appendChild(head);
+    (D.clients||[]).forEach(function(c){
+      var sec=document.createElement('div');sec.className='dash-sec';
+      var h='<h3>'+esc(c.name)+'</h3>';
+      if(c.projects.length){
+        c.projects.forEach(function(p){
+          var active=p.id===D.activeProjectId;
+          h+='<div class="dash-item"><div class="di-body"><div class="di-title">'+esc(p.name)+(active?' <span class="di-tag note">active</span>':'')+'</div>'
+            +'<div class="di-sub">'+p.pieces+' pieces · '+(p.hasCode?'client code set':'no client code yet')+'</div></div>'
+            +'<button class="mini-btn ghost" data-open="'+esc(p.id)+'"'+(active?' disabled':'')+'>Open</button>'
+            +'<button class="mini-btn ghost" data-code="'+esc(p.id)+'">Set code</button></div>';
+        });
+      } else h+='<div class="dash-empty">No projects yet.</div>';
+      h+='<div class="acct-form"><input class="npName" placeholder="New project name" /><input class="npIntro" placeholder="Client intro (optional)" style="min-width:240px" /><button class="mini-btn" data-addproj="'+esc(c.id)+'">Add project</button></div>';
+      sec.innerHTML=h; wrap.appendChild(sec);
+    });
+    host.appendChild(wrap);
+    var ncMsg=document.getElementById('ncMsg');
+    document.getElementById('ncAdd').addEventListener('click',function(){
+      var n=document.getElementById('ncName').value.trim();
+      if(!n){ ncMsg.className='acct-msg err'; ncMsg.textContent='Enter a client name.'; return; }
+      api('POST','/api/client-add',{name:n}).then(reloadKeepOpen).catch(function(e){ ncMsg.className='acct-msg err'; ncMsg.textContent=(e&&e.error)||'Failed'; });
+    });
+    wrap.querySelectorAll('[data-addproj]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var row=btn.closest('.acct-form'), nm=row.querySelector('.npName').value.trim(), intro=row.querySelector('.npIntro').value.trim();
+        if(!nm){ row.querySelector('.npName').focus(); return; }
+        api('POST','/api/project-add',{clientId:btn.getAttribute('data-addproj'),name:nm,intro:intro}).then(function(){ FILTER='__all__'; return reloadKeepOpen(); });
+      });
+    });
+    wrap.querySelectorAll('[data-open]').forEach(function(btn){
+      btn.addEventListener('click',function(){ api('POST','/api/project-select',{projectId:btn.getAttribute('data-open')}).then(function(){ FILTER='__all__'; return reloadKeepOpen(); }); });
+    });
+    wrap.querySelectorAll('[data-code]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var code=window.prompt('Set the client access code for this project (min 4 characters):');
+        if(code==null) return; code=code.trim();
+        if(code.length<4){ alert('Code must be at least 4 characters.'); return; }
+        api('POST','/api/project-set-code',{projectId:btn.getAttribute('data-code'),code:code}).then(reloadKeepOpen).catch(function(e){ alert((e&&e.error)||'Failed'); });
+      });
+    });
+  }
+
+  // ---- Project settings (admin) ----
+  function renderSettings(){
+    var w=document.createElement('div');w.className='dash-sec';
+    w.innerHTML='<h3>Project settings</h3><div class="sec-note">Editing the active project — '+esc(D.project.name)+'. This is the header and intro the client sees.</div>'
+      +'<div class="acct-form" style="flex-direction:column;align-items:stretch;max-width:560px">'
+      +'<input id="stName" placeholder="Project name" value="'+esc(D.project.name)+'" />'
+      +'<input id="stPrep" placeholder="Produced by" value="'+esc(D.project.preparedBy||'')+'" />'
+      +'<textarea id="stIntro" placeholder="Client intro" style="font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;min-height:90px;resize:vertical">'+esc(D.project.intro||'')+'</textarea>'
+      +'<div><button class="mini-btn" id="stSave">Save settings</button></div>'
+      +'</div><div class="acct-msg" id="stMsg"></div>';
+    host.appendChild(w);
+    document.getElementById('stSave').addEventListener('click',function(){
+      var msg=document.getElementById('stMsg');
+      var nameVal=document.getElementById('stName').value.trim(), introVal=document.getElementById('stIntro').value, prepVal=document.getElementById('stPrep').value.trim();
+      api('POST','/api/project-update',{projectId:D.project.id,name:nameVal,intro:introVal,preparedBy:prepVal})
+        .then(function(){ if(nameVal) D.project.name=nameVal; D.project.intro=introVal; D.project.preparedBy=prepVal; applyProjectChrome(); msg.className='acct-msg ok'; msg.textContent='Saved.'; })
+        .catch(function(e){ msg.className='acct-msg err'; msg.textContent=(e&&e.error)||'Failed'; });
     });
   }
 
@@ -762,7 +835,7 @@
     return el;
   }
 
-  function reloadKeepOpen(){ return api('GET','/api/data').then(function(data){ D=data; render(); refreshBar(); }); }
+  function reloadKeepOpen(){ return api('GET','/api/data').then(function(data){ D=data; applyProjectChrome(); render(); refreshBar(); }); }
 
   function refreshBar(){
     var fin=0,voc=0,cov=0,notes=0,total=0;
@@ -773,7 +846,7 @@
   }
 
   document.getElementById('copyBtn').addEventListener('click',function(){
-    var lines=[D.client.project+' — my review','('+D.client.name+')',''],fin=[],voc=[],cov=[],notes=[];
+    var lines=[D.project.name+' — my review','('+D.client.name+')',''],fin=[],voc=[],cov=[],notes=[];
     allTracks().forEach(function(x){
       var a=appr(x.t.id),loc=x.sub?x.cat+' / '+x.sub:x.cat,ttl=x.t.title;
       if(a.finalApproved)fin.push('✓ '+ttl+' ('+loc+')'); else if(a.cleanedApproved)voc.push('• '+ttl+' — vocal approved ('+loc+')');
