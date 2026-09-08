@@ -126,6 +126,8 @@
   .stage-actions{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
   .approve-btn{font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid var(--done);background:#fff;color:var(--done);padding:7px 14px;border-radius:8px}
   .approve-btn.on{background:var(--done);color:#fff}
+  .approve-btn:disabled{opacity:.45;cursor:not-allowed}
+  .note-box[readonly]{background:var(--line-soft);cursor:not-allowed}
   .note-toggle{font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline;font-family:inherit}
   .note-box{width:100%;margin-top:8px;font-family:inherit;font-size:13px;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:9px 11px;resize:vertical;min-height:40px;display:none}
   .note-box.open{display:block}
@@ -313,7 +315,7 @@
     document.getElementById('ibSub').textContent='Prepared for '+D.client.name+'  ·  produced by '+D.client.preparedBy;
     document.getElementById('ibIntro').textContent=D.client.intro;
     document.getElementById('copyBtn').textContent=D.contact&&D.contact.label?D.contact.label:'Copy my approvals to send to Craig';
-    document.getElementById('previewBanner').textContent='Previewing as '+D.client.name+' — this is exactly what the client sees. Read-only.';
+    document.getElementById('previewBanner').textContent='Previewing as '+D.client.name+' — exactly what the client sees. Read-only: to actually approve or request a change, log in with the client code.';
     var vt=document.getElementById('viewToggle');
     vt.onclick=function(){
       PREVIEW=!PREVIEW;
@@ -597,7 +599,7 @@
         if(!PREVIEW){
           actions.querySelector('.approve-btn').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:'art',approved:!approved}).then(reloadKeepOpen); });
           nb.addEventListener('change',function(){ api('POST','/api/note',{trackId:tr.id,stage:'art',note:nb.value.trim()}).then(function(){ a.artNote=nb.value.trim(); refreshBar(); }); });
-        }else{ actions.querySelector('.approve-btn').disabled=true; nb.readOnly=true; }
+        }else{ var pbtn=actions.querySelector('.approve-btn'); pbtn.disabled=true; pbtn.title='Read-only preview — log in with the client code to approve'; nb.readOnly=true; nb.title='Read-only preview'; }
       }else if(a.artNote){
         el.insertAdjacentHTML('beforeend','<div class="client-note-view"><b>Client note:</b> '+esc(a.artNote)+'</div>');
       }
@@ -650,7 +652,7 @@
         if(!PREVIEW){
           actions.querySelector('.approve-btn').addEventListener('click',approveHandler);
           nb.addEventListener('change',function(){ api('POST','/api/note',{trackId:tr.id,stage:stage,note:nb.value.trim()}).then(function(){ a[stage+'Note']=nb.value.trim(); refreshBar(); }); });
-        }else{ actions.querySelector('.approve-btn').disabled=true; nb.readOnly=true; }
+        }else{ var pbtn=actions.querySelector('.approve-btn'); pbtn.disabled=true; pbtn.title='Read-only preview — log in with the client code to approve'; nb.readOnly=true; nb.title='Read-only preview'; }
       }else{
         // admin sees the client's note + approval read-only
         if(a[stage+'Note']) el.insertAdjacentHTML('beforeend','<div class="client-note-view"><b>Client note:</b> '+esc(a[stage+'Note'])+'</div>');
