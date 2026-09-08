@@ -3,17 +3,17 @@
    through the admin UI (uploads, stage toggles, status). Editing this file
    does NOT change an already-seeded store. */
 
-function t(title, raw, cleaned, music, final, induction, note){
+function t(title, raw, cleaned, music, final, note){
   return {
     title: title,
-    induction: induction || "no",
-    endMusic: final ? "standard close" : "TBD",
     note: note || "",
     raw: raw,                 // "received" | "accepted" | "rerecord"
     cleaned: !!cleaned,       // stage ready-for-client flags
     music: !!music,
     final: !!final,
-    audio: { raw:"", cleaned:"", music:"", final:"" }
+    art: false,               // artwork ready-for-client flag
+    audio: { raw:"", cleaned:"", music:"", final:"" },
+    cover: ""                 // approved cover image filename
   };
 }
 
@@ -56,7 +56,7 @@ module.exports = {
             t("The Eternal Sound as a Fragment of the Divine", "accepted", false, false, false),
             t("The Self in All Hearts",          "accepted", false, false, false),
             t("The Supreme Surrender",           "accepted", false, false, false),
-            t("Gita Induction",                  "received", false, false, false, "yes", "Opens the Gita series for the practitioner tier.")
+            t("Gita Induction",                  "received", false, false, false, "Opens the Gita series for the practitioner tier.")
           ]
         },
         {
@@ -72,7 +72,7 @@ module.exports = {
             t("The Quality of Your Thoughts",     "accepted", false, false, false),
             t("Thoughts Colour the Soul",         "accepted", false, false, false),
             t("Your Relationship with Fate",      "accepted", false, false, false),
-            t("Spoken Passage (Book 4, Section 3)","received", false, false, false, "no", "Title may need confirming against your original script.")
+            t("Spoken Passage (Book 4, Section 3)","received", false, false, false, "Title may need confirming against your original script.")
           ]
         }
       ]

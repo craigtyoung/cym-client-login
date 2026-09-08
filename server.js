@@ -53,13 +53,27 @@ function removeTrackById(data, id){
   });
   return removed;
 }
-function newTrack(data, title, induction, endMusic, raw){
+function newTrack(data, title, raw){
   return {
     id: uniqueId(data, title), title: String(title).slice(0,200),
-    induction: induction || 'no', endMusic: endMusic || 'TBD', note: '',
-    raw: raw || 'received', cleaned:false, music:false, final:false,
-    audio: { raw:'', cleaned:'', music:'', final:'' }
+    note: '',
+    raw: raw || 'received', cleaned:false, music:false, final:false, art:false,
+    audio: { raw:'', cleaned:'', music:'', final:'' }, cover:''
   };
+}
+// backfill new fields / drop retired ones on an already-seeded store
+function normalizeData(data){
+  var changed=false;
+  eachTrack(data, function(tr){
+    if(!('art' in tr)){ tr.art=false; changed=true; }
+    if(!('cover' in tr)){ tr.cover=''; changed=true; }
+    if(!tr.audio){ tr.audio={raw:'',cleaned:'',music:'',final:''}; changed=true; }
+    ['raw','cleaned','music','final'].forEach(function(k){ if(!(k in tr.audio)){ tr.audio[k]=''; changed=true; } });
+    if('induction' in tr){ delete tr.induction; changed=true; }
+    if('endMusic' in tr){ delete tr.endMusic; changed=true; }
+  });
+  if(!data.approvals){ data.approvals={}; changed=true; }
+  return changed;
 }
 
 // ---------- seed on first run ----------
@@ -89,10 +103,13 @@ function loadData(){
   ensureDir(DATA_DIR); ensureDir(AUDIO_DIR);
   if(!fs.existsSync(DATA_FILE)){
     const seeded = seedData();
+    normalizeData(seeded);
     fs.writeFileSync(DATA_FILE, JSON.stringify(seeded, null, 2));
     return seeded;
   }
-  return JSON.parse(fs.readFileSync(DATA_FILE,'utf8'));
+  const data = JSON.parse(fs.readFileSync(DATA_FILE,'utf8'));
+  if(normalizeData(data)) fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  return data;
 }
 function saveData(data){ fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2)); }
 
@@ -140,14 +157,14 @@ app.get('/api/data', requireAuth, function(req,res){
 // ---- client actions ----
 app.post('/api/approve', requireAuth, function(req,res){
   const {trackId, stage, approved} = req.body||{};
-  if(['cleaned','final'].indexOf(stage)<0) return res.status(400).json({error:'bad stage'});
+  if(['cleaned','final','art'].indexOf(stage)<0) return res.status(400).json({error:'bad stage'});
   const a = DATA.approvals[trackId] || (DATA.approvals[trackId]={});
-  a[stage==='cleaned'?'cleanedApproved':'finalApproved'] = !!approved;
+  a[stage+'Approved'] = !!approved;
   saveData(DATA); res.json({ok:true, approvals:DATA.approvals[trackId]});
 });
 app.post('/api/note', requireAuth, function(req,res){
   const {trackId, stage, note} = req.body||{};
-  if(['cleaned','music','final'].indexOf(stage)<0) return res.status(400).json({error:'bad stage'});
+  if(['cleaned','music','final','art'].indexOf(stage)<0) return res.status(400).json({error:'bad stage'});
   const a = DATA.approvals[trackId] || (DATA.approvals[trackId]={});
   a[stage+'Note'] = String(note||'').slice(0,2000);
   saveData(DATA); res.json({ok:true});
@@ -164,19 +181,19 @@ app.post('/api/track/:id', requireAdmin, function(req,res){
   if(!tr) return res.status(404).json({error:'no track'});
   const p = req.body||{};
   ['raw'].forEach(function(k){ if(p[k]!=null) tr[k]=p[k]; });
-  ['cleaned','music','final'].forEach(function(k){ if(p[k]!=null) tr[k]=!!p[k]; });
+  ['cleaned','music','final','art'].forEach(function(k){ if(p[k]!=null) tr[k]=!!p[k]; });
   if(p.title!=null) tr.title = String(p.title).slice(0,200);
-  ['induction','endMusic','note'].forEach(function(k){ if(p[k]!=null) tr[k]=String(p[k]).slice(0,300); });
+  ['note'].forEach(function(k){ if(p[k]!=null) tr[k]=String(p[k]).slice(0,300); });
   saveData(DATA); res.json({ok:true, track:tr});
 });
 
 // ---- admin content editor ----
 app.post('/api/track-add', requireAdmin, function(req,res){
-  const {catIndex, subIndex, title, induction, endMusic, raw} = req.body||{};
+  const {catIndex, subIndex, title, raw} = req.body||{};
   if(!title || !String(title).trim()) return res.status(400).json({error:'title required'});
   const list = listAt(DATA, catIndex, subIndex);
   if(!list) return res.status(400).json({error:'bad location'});
-  const tr = newTrack(DATA, String(title).trim(), induction, endMusic, raw);
+  const tr = newTrack(DATA, String(title).trim(), raw);
   list.push(tr); saveData(DATA); res.json({ok:true, track:tr});
 });
 app.post('/api/track-delete', requireAdmin, function(req,res){
@@ -184,11 +201,12 @@ app.post('/api/track-delete', requireAdmin, function(req,res){
   const removed = removeTrackById(DATA, id);
   if(!removed) return res.status(404).json({error:'no track'});
   delete DATA.approvals[id];
-  // best-effort remove its audio files
+  // best-effort remove its audio + cover files
   ['cleaned','music','final'].forEach(function(stage){
     var f = removed.audio && removed.audio[stage];
     if(f){ try{ fs.unlinkSync(path.join(AUDIO_DIR, f)); }catch(e){} }
   });
+  if(removed.cover){ try{ fs.unlinkSync(path.join(AUDIO_DIR, removed.cover)); }catch(e){} }
   saveData(DATA); res.json({ok:true});
 });
 app.post('/api/category-add', requireAdmin, function(req,res){
@@ -217,31 +235,37 @@ const upload = multer({
 app.post('/api/upload', requireAuth, upload.single('file'), function(req,res){
   const {trackId, stage} = req.body||{};
   const cleanup = function(){ if(req.file){ try{ fs.unlinkSync(req.file.path); }catch(e){} } };
-  if(['raw','cleaned','music','final'].indexOf(stage)<0){ cleanup(); return res.status(400).json({error:'bad stage'}); }
-  // client may only upload the RAW recording; producing stages are admin-only
+  if(['raw','cleaned','music','final','art'].indexOf(stage)<0){ cleanup(); return res.status(400).json({error:'bad stage'}); }
+  // client may only upload the RAW recording; producing stages (incl. artwork) are admin-only
   if(stage!=='raw' && req.role!=='admin'){ cleanup(); return res.status(403).json({error:'admin only for this stage'}); }
   const tr = findTrack(DATA, trackId);
   if(!tr){ cleanup(); return res.status(404).json({error:'no track'}); }
   if(!req.file) return res.status(400).json({error:'no file'});
-  const ext = path.extname(req.file.originalname||'.mp3') || '.mp3';
+  const ext = path.extname(req.file.originalname||'') || (stage==='art'?'.png':'.mp3');
   const finalName = trackId+'-'+stage+ext;
   const dest = path.join(AUDIO_DIR, finalName);
   try{ if(fs.existsSync(dest)) fs.unlinkSync(dest); fs.renameSync(req.file.path, dest); }
   catch(e){ return res.status(500).json({error:'save failed'}); }
-  if(!tr.audio) tr.audio={};
-  tr.audio[stage] = finalName;
-  if(stage==='raw'){ if(req.role==='client') tr.raw='received'; } // client (re)submission returns it to your review
-  else { tr[stage] = true; }                                     // producing a stage marks it ready for the client
+  if(stage==='art'){
+    tr.cover = finalName; tr.art = true;                         // uploading the cover marks it ready for the client
+  }else{
+    if(!tr.audio) tr.audio={};
+    tr.audio[stage] = finalName;
+    if(stage==='raw'){ if(req.role==='client') tr.raw='received'; } // client (re)submission returns it to your review
+    else { tr[stage] = true; }                                     // producing a stage marks it ready for the client
+  }
   saveData(DATA); res.json({ok:true, file:finalName, track:tr});
 });
 
-// ---- audio ----
-app.get('/audio/:file', function(req,res){
+// ---- audio + media (covers) — both served from the store dir ----
+function serveStoreFile(req,res){
   const f = path.basename(req.params.file);
   const p = path.join(AUDIO_DIR, f);
   if(!fs.existsSync(p)) return res.status(404).end();
   res.sendFile(p);
-});
+}
+app.get('/audio/:file', serveStoreFile);
+app.get('/media/:file', serveStoreFile);
 
 // ---- static assets (allow-list; never serve server.js/seed.js/data) ----
 app.get('/', function(req,res){ res.sendFile(path.join(__dirname,'index.html')); });

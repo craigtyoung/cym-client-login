@@ -168,6 +168,37 @@
   .copy-btn:hover{background:var(--navy-2)}
   .copy-btn.done{background:var(--done)}
 
+  /* View-as-client toggle + preview banner */
+  .view-toggle{font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;color:#0e1626;background:var(--gold-2);border:none;padding:7px 13px;border-radius:9px}
+  .view-toggle:hover{background:var(--gold);color:#fff}
+  .view-toggle.previewing{background:transparent;color:#aeb6c9;border:1px solid rgba(255,255,255,.28)}
+  .preview-banner{position:fixed;top:var(--topbar-h);left:0;right:0;z-index:35;background:var(--gold-2);color:#0e1626;font-size:12.5px;font-weight:600;text-align:center;padding:7px 14px;display:none}
+  body.previewing .preview-banner{display:block}
+  body.previewing .sidebar{top:calc(var(--topbar-h) + 33px)}
+  body.previewing .main{padding-top:59px}
+
+  /* Artwork stage */
+  .cover-img{width:100%;max-width:300px;border-radius:11px;margin-top:8px;display:block;border:1px solid var(--line)}
+  .no-cover{font-size:12.5px;color:var(--muted);background:var(--bg);border:1px dashed var(--line);border-radius:9px;padding:9px 12px;margin-top:8px}
+
+  /* Admin dashboard */
+  .dash-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;margin-bottom:22px}
+  .dash-card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:16px 18px;box-shadow:var(--shadow)}
+  .dash-card .dc-num{font-family:'Fraunces',serif;font-size:30px;font-weight:600;color:var(--navy);line-height:1}
+  .dash-card .dc-lbl{font-size:12px;color:var(--muted);margin-top:6px}
+  .dash-card.attn .dc-num{color:var(--await)}
+  .dash-sec{background:#fff;border:1px solid var(--line);border-radius:13px;padding:18px 20px;margin-bottom:18px;box-shadow:var(--shadow)}
+  .dash-sec h3{font-family:'Fraunces',serif;font-size:18px;color:var(--navy);margin-bottom:4px;font-weight:600}
+  .dash-sec .sec-note{font-size:12px;color:var(--muted);margin-bottom:12px}
+  .dash-item{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line-soft);font-size:13px}
+  .dash-item:last-child{border-bottom:none}
+  .di-tag{flex:0 0 auto;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:20px;margin-top:1px}
+  .di-tag.await{color:var(--await);background:var(--await-bg)} .di-tag.alert{color:var(--alert);background:var(--alert-bg)} .di-tag.note{color:var(--navy);background:var(--lock-bg)}
+  .di-body{flex:1;min-width:0}
+  .di-title{font-weight:600;color:var(--ink)}
+  .di-sub{color:var(--muted);font-size:12px;margin-top:2px}
+  .dash-empty{font-size:13px;color:var(--muted);padding:6px 0}
+
   @media (max-width:860px){
     .sidebar{display:none}.main{margin-left:0;padding:18px 14px 110px}.bar{left:0}
     .step{width:52px}.step::before{width:52px;left:-26px}.step .slabel{display:none}
@@ -192,10 +223,12 @@
     <div class="topbar">
       <img class="tb-logo" id="logo" alt="Craig Young Music" />
       <div class="tb-right">
+        <button class="view-toggle" id="viewToggle" style="display:none">View as client</button>
         <span class="role-badge" id="roleBadge"></span>
         <button class="logout-btn" id="logoutBtn">Log out</button>
       </div>
     </div>
+    <div class="preview-banner" id="previewBanner"></div>
 
     <div class="shell">
       <aside class="sidebar">
@@ -239,7 +272,9 @@
 
 <script>
 (function(){
-  var D=null, ROLE=null, FILTER='__all__', openIds={};
+  var D=null, ROLE=null, FILTER='__all__', openIds={}, PREVIEW=false;
+  // effective view-role: admin can preview the client experience without logging out
+  function vr(){ return PREVIEW ? 'client' : ROLE; }
 
   // ---- api helpers
   function api(method,url,body){
@@ -277,11 +312,27 @@
     document.getElementById('ibTitle').textContent=D.client.project;
     document.getElementById('ibSub').textContent='Prepared for '+D.client.name+'  ·  produced by '+D.client.preparedBy;
     document.getElementById('ibIntro').textContent=D.client.intro;
-    var badge=document.getElementById('roleBadge');
-    badge.className='role-badge '+(ROLE==='admin'?'admin':'client');
-    badge.textContent=ROLE==='admin'?'Admin · '+D.client.preparedBy:'Client';
-    document.getElementById('adminHint').style.display = ROLE==='admin'?'inline-block':'none';
     document.getElementById('copyBtn').textContent=D.contact&&D.contact.label?D.contact.label:'Copy my approvals to send to Craig';
+    document.getElementById('previewBanner').textContent='Previewing as '+D.client.name+' — this is exactly what the client sees. Read-only.';
+    var vt=document.getElementById('viewToggle');
+    vt.onclick=function(){
+      PREVIEW=!PREVIEW;
+      if(PREVIEW && FILTER==='__dash__') FILTER='__all__';
+      syncViewChrome(); render(); refreshBar();
+      window.scrollTo({top:0,behavior:'smooth'});
+    };
+    syncViewChrome();
+  }
+  function syncViewChrome(){
+    var showRole=vr(), badge=document.getElementById('roleBadge');
+    badge.className='role-badge '+(showRole==='admin'?'admin':'client');
+    badge.textContent = showRole==='admin' ? 'Admin · '+D.client.preparedBy : (PREVIEW?'Client view':'Client');
+    document.getElementById('adminHint').style.display = showRole==='admin'?'inline-block':'none';
+    var vt=document.getElementById('viewToggle');
+    vt.style.display = ROLE==='admin' ? 'inline-block' : 'none';
+    vt.textContent = PREVIEW ? 'Back to admin view' : 'View as client';
+    vt.classList.toggle('previewing', PREVIEW);
+    document.body.classList.toggle('previewing', PREVIEW);
   }
 
   // ---- model helpers
@@ -296,7 +347,8 @@
       raw: tr.raw==='rerecord'?'alert':(tr.raw==='accepted'?'done':'neutral'),
       cleaned: !tr.cleaned?'lock':(a.cleanedApproved?'done':'await'),
       music: !tr.music?'lock':(a.musicSeen?'done':'await'),
-      final: !tr.final?'lock':(a.finalApproved?'done':'await')
+      final: !tr.final?'lock':(a.finalApproved?'done':'await'),
+      art: !tr.art?'lock':(a.artApproved?'done':'await')
     };
   }
   function statusLabel(tr){
@@ -314,13 +366,17 @@
   var nav=document.getElementById('nav'), host=document.getElementById('categories');
   function render(){
     nav.innerHTML=''; host.innerHTML='';
+    var isDash = (FILTER==='__dash__' && vr()==='admin');
+    if(vr()==='admin') addNav('Dashboard','__dash__',false);
     addNav('Overview','__all__',false);
+    if(isDash) renderDashboard();
     D.categories.forEach(function(cat, ci){
       var sec=document.createElement('section');sec.className='category';
-      if(FILTER!=='__all__' && FILTER.split('::')[0]!==cat.name) sec.style.display='none';
+      if(isDash) sec.style.display='none';
+      else if(FILTER!=='__all__' && FILTER.split('::')[0]!==cat.name) sec.style.display='none';
       var head=document.createElement('div');head.className='cat-head';
       head.innerHTML='<div class="cat-name">'+esc(cat.name)+'</div>'+(cat.subtitle?'<div class="cat-sub">'+esc(cat.subtitle)+'</div>':'')+'<div class="cat-count">'+catTracks(cat).length+' pieces</div>';
-      if(ROLE==='admin' && cat.subcategories){
+      if(vr()==='admin' && cat.subcategories){
         var asb=document.createElement('button');asb.className='cat-add-btn';asb.textContent='+ sacred text';
         asb.addEventListener('click',function(){
           if(sec.querySelector('.subadd-form')) return;
@@ -342,18 +398,48 @@
           var block=document.createElement('div'); if(!showSub) block.style.display='none';
           var lbl=document.createElement('div');lbl.className='subcat';lbl.textContent=sub.name+'  ·  '+sub.tracks.length+' pieces';
           block.appendChild(lbl);block.appendChild(listEl(sub.tracks));
-          if(ROLE==='admin') block.appendChild(addTrackControl(ci, si));
+          if(vr()==='admin') block.appendChild(addTrackControl(ci, si));
           sec.appendChild(block);
         });
       }else{
         sec.appendChild(listEl(cat.tracks));
-        if(ROLE==='admin') sec.appendChild(addTrackControl(ci, null));
+        if(vr()==='admin') sec.appendChild(addTrackControl(ci, null));
       }
       host.appendChild(sec);
       addNav(cat.name,cat.name,false,catTracks(cat).length);
       if(cat.subcategories) cat.subcategories.forEach(function(sub){ addNav(sub.name,cat.name+'::'+sub.name,true,sub.tracks.length); });
     });
-    if(ROLE==='admin') host.appendChild(addCollectionControl());
+    if(!isDash && vr()==='admin') host.appendChild(addCollectionControl());
+  }
+
+  // ---- admin dashboard (basic) ----
+  function renderDashboard(){
+    var tracks=allTracks();
+    var total=tracks.length, finalApproved=0, coversApproved=0, awaitingClient=0, rawToAccept=0;
+    var attention=[];
+    tracks.forEach(function(x){
+      var tr=x.t, a=appr(tr.id), loc=x.sub?x.cat+' / '+x.sub:x.cat;
+      if(a.finalApproved) finalApproved++;
+      if(a.artApproved) coversApproved++;
+      if(tr.raw==='received'){ rawToAccept++; attention.push({tag:'To accept',cls:'await',title:tr.title,sub:loc+'  ·  raw recording is in — accept it into production'}); }
+      if(tr.raw==='rerecord') attention.push({tag:'Re-record',cls:'alert',title:tr.title,sub:loc+'  ·  flagged for re-record'});
+      if(tr.cleaned && !a.cleanedApproved) awaitingClient++;
+      if(tr.final && !a.finalApproved) awaitingClient++;
+      if(tr.art && !a.artApproved) awaitingClient++;
+      [['cleaned','Vocal'],['music','Music'],['final','Final'],['art','Cover']].forEach(function(p){
+        var n=a[p[0]+'Note']; if(n) attention.push({tag:'Change',cls:'note',title:tr.title,sub:'['+p[1]+']  '+n});
+      });
+    });
+    var cards=[['Pieces',total,''],['Awaiting you',rawToAccept,'attn'],['Awaiting client',awaitingClient,''],['Final approved',finalApproved,''],['Covers approved',coversApproved,'']];
+    var ch='<div class="dash-cards">';
+    cards.forEach(function(c){ ch+='<div class="dash-card '+c[2]+'"><div class="dc-num">'+c[1]+'</div><div class="dc-lbl">'+c[0]+'</div></div>'; });
+    ch+='</div>';
+    var at='<div class="dash-sec"><h3>Needs your attention</h3><div class="sec-note">Raw recordings to accept, re-records, and every change the client has requested.</div>';
+    if(attention.length) attention.forEach(function(it){ at+='<div class="dash-item"><span class="di-tag '+it.cls+'">'+esc(it.tag)+'</span><div class="di-body"><div class="di-title">'+esc(it.title)+'</div><div class="di-sub">'+esc(it.sub)+'</div></div></div>'; });
+    else at+='<div class="dash-empty">Nothing waiting on you. Everything is with the client or complete.</div>';
+    at+='</div>';
+    var wrap=document.createElement('div');wrap.innerHTML=ch+at;
+    host.appendChild(wrap);
   }
 
   // ---- admin content-editor controls ----
@@ -365,13 +451,11 @@
       if(wrap.querySelector('.add-form')) return;
       var form=document.createElement('div');form.className='add-form';
       form.innerHTML='<input class="title" placeholder="Piece title" />'
-        +'<select class="ind"><option value="no">No induction</option><option value="yes">Induction</option></select>'
-        +'<input class="end" placeholder="End music (optional)" style="max-width:150px" />'
         +'<button class="mini-btn" data-save>Add</button><button class="mini-btn ghost" data-cancel>Cancel</button>';
       wrap.appendChild(form);
       var ti=form.querySelector('.title'); ti.focus();
       form.querySelector('[data-cancel]').addEventListener('click',function(){ form.remove(); });
-      function submit(){ var t=ti.value.trim(); if(!t){ti.focus();return;} api('POST','/api/track-add',{catIndex:ci,subIndex:si,title:t,induction:form.querySelector('.ind').value,endMusic:form.querySelector('.end').value.trim()}).then(reloadKeepOpen); }
+      function submit(){ var t=ti.value.trim(); if(!t){ti.focus();return;} api('POST','/api/track-add',{catIndex:ci,subIndex:si,title:t}).then(reloadKeepOpen); }
       form.querySelector('[data-save]').addEventListener('click',submit);
       ti.addEventListener('keydown',function(e){ if(e.key==='Enter') submit(); });
     });
@@ -383,6 +467,7 @@
     var cur = tr.audio && tr.audio[stage];
     box.innerHTML='<div class="ulbl">'+esc(label)+'</div><div class="admin-row"><input type="file" accept="audio/*" data-file><button class="mini-btn" data-up>Upload</button><span class="uling">'+(cur?('current: '+esc(cur)):'no file yet')+'</span></div>';
     var fi=box.querySelector('[data-file]'), ub=box.querySelector('[data-up]');
+    if(PREVIEW){ ub.disabled=true; fi.disabled=true; }
     ub.addEventListener('click',function(){
       if(!fi.files||!fi.files[0]) return;
       ub.disabled=true; ub.textContent='Uploading…';
@@ -417,15 +502,12 @@
     box.innerHTML='<div class="lbl">Piece details</div>'
       +'<div class="details-grid">'
       +'<input class="title" placeholder="Title" value="'+esc(tr.title)+'" />'
-      +'<select class="ind"><option value="no">No induction</option><option value="yes">Induction</option></select>'
-      +'<input class="end" placeholder="End music" style="max-width:150px" value="'+esc(tr.endMusic||'')+'" />'
       +'<button class="mini-btn" data-save>Save</button>'
       +'<button class="danger-btn" data-del>Remove piece</button>'
       +'</div>'
       +'<input data-note placeholder="Internal note (optional)" style="margin-top:8px;width:100%;font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px" value="'+esc(tr.note||'')+'" />';
-    box.querySelector('.ind').value = tr.induction==='yes'?'yes':'no';
     box.querySelector('[data-save]').addEventListener('click',function(){
-      api('POST','/api/track/'+tr.id,{ title:box.querySelector('.title').value.trim()||tr.title, induction:box.querySelector('.ind').value, endMusic:box.querySelector('.end').value.trim(), note:box.querySelector('[data-note]').value.trim() }).then(reloadKeepOpen);
+      api('POST','/api/track/'+tr.id,{ title:box.querySelector('.title').value.trim()||tr.title, note:box.querySelector('[data-note]').value.trim() }).then(reloadKeepOpen);
     });
     box.querySelector('[data-del]').addEventListener('click',function(){
       if(confirm('Remove "'+tr.title+'"? This deletes the piece and any uploaded audio for it.')) api('POST','/api/track-delete',{id:tr.id}).then(function(){ openIds[tr.id]=0; reloadKeepOpen(); });
@@ -447,7 +529,7 @@
     function stepHtml(cls,label,num){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
     var row=document.createElement('div');row.className='row';
     row.innerHTML='<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+'</div></div>'
-      +'<div class="tracker">'+stepHtml(st.raw,'Raw',1)+stepHtml(st.cleaned,'Vocal',2)+stepHtml(st.music,'Music',3)+stepHtml(st.final,'Final',4)+'</div><div class="chev">▶</div>';
+      +'<div class="tracker">'+stepHtml(st.raw,'Raw',1)+stepHtml(st.cleaned,'Vocal',2)+stepHtml(st.music,'Music',3)+stepHtml(st.final,'Final',4)+stepHtml(st.art,'Cover',5)+'</div><div class="chev">▶</div>';
     var expand=document.createElement('div');expand.className='expand';
     wrap.appendChild(row);wrap.appendChild(expand);
     var built=openIds[tr.id]; if(built) buildExpand(tr,expand);
@@ -469,7 +551,7 @@
     expand.innerHTML='';
     var a=appr(tr.id);
 
-    if(ROLE==='admin') expand.appendChild(detailsEditor(tr));
+    if(vr()==='admin') expand.appendChild(detailsEditor(tr));
 
     // Stage 1 — Raw
     var rawChip=tr.raw==='accepted'?['done','Accepted']:(tr.raw==='rerecord'?['alert','Re-record']:['lock','Received']);
@@ -477,12 +559,12 @@
     if(tr.raw==='rerecord') s1.insertAdjacentHTML('beforeend','<div class="rerecord-banner">This recording needs to be re-recorded. Please record again and upload it below.</div>');
     else {
       var rawMsg = tr.raw==='accepted' ? 'Recording is in and accepted for production.'
-                 : (ROLE==='client' ? 'Upload your recording here so it can go into production.' : 'Recording is in, awaiting your review.');
+                 : (vr()==='client' ? 'Upload your recording here so it can go into production.' : 'Recording is in, awaiting your review.');
       s1.insertAdjacentHTML('beforeend','<div class="stage-body">'+rawMsg+'</div>');
     }
     if(tr.audio && tr.audio.raw) s1.insertAdjacentHTML('beforeend', audioHtml(tr.audio.raw));
-    s1.appendChild(uploadRow(tr,'raw', ROLE==='client' ? (tr.raw==='rerecord'?'Re-record and upload':'Upload your recording') : "Upload raw recording (on client's behalf)"));
-    if(ROLE==='admin'){
+    s1.appendChild(uploadRow(tr,'raw', vr()==='client' ? (tr.raw==='rerecord'?'Re-record and upload':'Upload your recording') : "Upload raw recording (on client's behalf)"));
+    if(vr()==='admin'){
       var ab=document.createElement('div');ab.className='admin-box';
       ab.innerHTML='<div class="lbl">Admin</div><div class="admin-row">Raw status: <select data-raw><option value="received">Received</option><option value="accepted">Accepted</option><option value="rerecord">Needs re-record</option></select></div>';
       ab.querySelector('[data-raw]').value=tr.raw;
@@ -495,6 +577,50 @@
     expand.appendChild(clientStage(tr,'2','Cleaned vocal','cleaned','Listen and approve the cleaned vocal, or ask for a fix.','I will clean the vocal here once the raw is accepted.'));
     expand.appendChild(clientStage(tr,'3','Suggested music','music','Preview the music. Optional note if you have thoughts.','The suggested music comes after the vocal is approved.'));
     expand.appendChild(clientStage(tr,'4','Final production','final','Give your final approval, or leave a note.','The final production comes together after the music.'));
+    expand.appendChild(artStage(tr));
+  }
+
+  // Stage 5 — cover artwork (image, approved like the audio stages)
+  function artStage(tr){
+    var a=appr(tr.id), ready=!!tr.art, file=tr.cover, approved=!!a.artApproved;
+    var chip = !ready?['lock','In progress']:(approved?['done','Approved']:['await','Awaiting client']);
+    var el=stageEl('5','Cover artwork',chip[0],chip[1]);
+    if(ready){
+      el.insertAdjacentHTML('beforeend', file?'<img class="cover-img" src="media/'+encodeURIComponent(file)+'" alt="cover artwork" />':'<div class="no-cover">No cover uploaded yet.</div>');
+      if(vr()==='client'){
+        var actions=document.createElement('div');actions.className='stage-actions';
+        actions.innerHTML='<button class="approve-btn'+(approved?' on':'')+'">'+(approved?'Approved ✓':'Approve cover')+'</button><button class="note-toggle">Request a change</button>';
+        el.appendChild(actions);
+        var nb=document.createElement('textarea');nb.className='note-box'+((a.artNote)?' open':'');nb.placeholder='What would you like changed about the cover?';nb.value=a.artNote||'';
+        el.appendChild(nb);
+        actions.querySelector('.note-toggle').addEventListener('click',function(){ nb.classList.toggle('open'); if(nb.classList.contains('open')) nb.focus(); });
+        if(!PREVIEW){
+          actions.querySelector('.approve-btn').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:'art',approved:!approved}).then(reloadKeepOpen); });
+          nb.addEventListener('change',function(){ api('POST','/api/note',{trackId:tr.id,stage:'art',note:nb.value.trim()}).then(function(){ a.artNote=nb.value.trim(); refreshBar(); }); });
+        }else{ actions.querySelector('.approve-btn').disabled=true; nb.readOnly=true; }
+      }else if(a.artNote){
+        el.insertAdjacentHTML('beforeend','<div class="client-note-view"><b>Client note:</b> '+esc(a.artNote)+'</div>');
+      }
+    }else{
+      el.insertAdjacentHTML('beforeend','<div class="stage-body">The cover artwork comes together with the final production.</div>');
+    }
+    if(vr()==='admin'){
+      var ab=document.createElement('div');ab.className='admin-box';
+      ab.innerHTML='<div class="lbl">Admin — Cover artwork</div>'
+        +'<div class="admin-row"><input type="file" accept="image/*" data-file><button class="mini-btn" data-up>Upload cover</button><span class="uling" data-cur>'+(file?('current: '+esc(file)):'no cover yet')+'</span></div>'
+        +'<div class="admin-row"><label class="toggle-lbl"><input type="checkbox" data-ready '+(ready?'checked':'')+'> Ready for client to review</label></div>';
+      var fileInput=ab.querySelector('[data-file]'), upBtn=ab.querySelector('[data-up]'), readyCb=ab.querySelector('[data-ready]');
+      upBtn.addEventListener('click',function(){
+        if(!fileInput.files||!fileInput.files[0]) return;
+        upBtn.disabled=true;upBtn.textContent='Uploading…';
+        var fd=new FormData();fd.append('file',fileInput.files[0]);fd.append('trackId',tr.id);fd.append('stage','art');
+        fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(){ reloadKeepOpen(); })
+          .catch(function(){ upBtn.disabled=false;upBtn.textContent='Upload cover'; alert('Upload failed'); });
+      });
+      readyCb.addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{art:readyCb.checked}).then(reloadKeepOpen); });
+      el.appendChild(ab);
+    }
+    return el;
   }
 
   function clientStage(tr,num,name,stage,readyHint,lockHint){
@@ -507,20 +633,24 @@
 
     if(ready){
       el.insertAdjacentHTML('beforeend',audioHtml(file));
-      if(ROLE==='client'){
+      if(vr()==='client'){
         var actions=document.createElement('div');actions.className='stage-actions';
+        var approveHandler;
         if(isApproveStage){
           actions.innerHTML='<button class="approve-btn'+(approved?' on':'')+'">'+(approved?'Approved ✓':'Approve')+'</button><button class="note-toggle">Request a change</button>';
-          actions.querySelector('.approve-btn').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:stage,approved:!approved}).then(reloadKeepOpen); });
+          approveHandler=function(){ api('POST','/api/approve',{trackId:tr.id,stage:stage,approved:!approved}).then(reloadKeepOpen); };
         }else{ // music
           actions.innerHTML='<button class="approve-btn'+(a.musicSeen?' on':'')+'">'+(a.musicSeen?'Music looks good ✓':'Mark music as previewed')+'</button><button class="note-toggle">Add a note on the music</button>';
-          actions.querySelector('.approve-btn').addEventListener('click',function(){ api('POST','/api/music-seen',{trackId:tr.id,seen:!a.musicSeen}).then(reloadKeepOpen); });
+          approveHandler=function(){ api('POST','/api/music-seen',{trackId:tr.id,seen:!a.musicSeen}).then(reloadKeepOpen); };
         }
         el.appendChild(actions);
         var nb=document.createElement('textarea');nb.className='note-box'+((a[stage+'Note'])?' open':'');nb.placeholder='What would you like changed?';nb.value=a[stage+'Note']||'';
         el.appendChild(nb);
         actions.querySelector('.note-toggle').addEventListener('click',function(){ nb.classList.toggle('open'); if(nb.classList.contains('open')) nb.focus(); });
-        nb.addEventListener('change',function(){ api('POST','/api/note',{trackId:tr.id,stage:stage,note:nb.value.trim()}).then(function(){ a[stage+'Note']=nb.value.trim(); refreshBar(); }); });
+        if(!PREVIEW){
+          actions.querySelector('.approve-btn').addEventListener('click',approveHandler);
+          nb.addEventListener('change',function(){ api('POST','/api/note',{trackId:tr.id,stage:stage,note:nb.value.trim()}).then(function(){ a[stage+'Note']=nb.value.trim(); refreshBar(); }); });
+        }else{ actions.querySelector('.approve-btn').disabled=true; nb.readOnly=true; }
       }else{
         // admin sees the client's note + approval read-only
         if(a[stage+'Note']) el.insertAdjacentHTML('beforeend','<div class="client-note-view"><b>Client note:</b> '+esc(a[stage+'Note'])+'</div>');
@@ -530,7 +660,7 @@
     }
 
     // admin upload/ready controls (all three stages)
-    if(ROLE==='admin'){
+    if(vr()==='admin'){
       var ab=document.createElement('div');ab.className='admin-box';
       ab.innerHTML='<div class="lbl">Admin — '+esc(name)+'</div>'
         +'<div class="admin-row"><input type="file" accept="audio/*" data-file><button class="mini-btn" data-up>Upload</button><span class="uling" data-cur>'+(file?('current: '+esc(file)):'no file yet')+'</span></div>'
@@ -552,24 +682,27 @@
   function reloadKeepOpen(){ return api('GET','/api/data').then(function(data){ D=data; render(); refreshBar(); }); }
 
   function refreshBar(){
-    var fin=0,voc=0,notes=0,total=0;
-    allTracks().forEach(function(x){ total++; var a=appr(x.t.id); if(a.finalApproved)fin++; if(a.cleanedApproved)voc++; if(a.cleanedNote||a.finalNote||a.musicNote)notes++; });
-    document.getElementById('barStat').innerHTML='<b>'+fin+'</b> finalized · <b>'+voc+'</b> vocals approved · <b>'+notes+'</b> with notes';
+    var fin=0,voc=0,cov=0,notes=0,total=0;
+    allTracks().forEach(function(x){ total++; var a=appr(x.t.id); if(a.finalApproved)fin++; if(a.cleanedApproved)voc++; if(a.artApproved)cov++; if(a.cleanedNote||a.finalNote||a.musicNote||a.artNote)notes++; });
+    document.getElementById('barStat').innerHTML='<b>'+fin+'</b> finalized · <b>'+voc+'</b> vocals approved · <b>'+cov+'</b> covers approved · <b>'+notes+'</b> with notes';
     var pct=total?Math.round(fin/total*100):0;
     document.getElementById('sideProgress').innerHTML='<b>'+fin+'</b> of '+total+' finalized<div class="prog-track"><div class="prog-fill" style="width:'+pct+'%"></div></div>';
   }
 
   document.getElementById('copyBtn').addEventListener('click',function(){
-    var lines=[D.client.project+' — my review','('+D.client.name+')',''],fin=[],voc=[],notes=[];
+    var lines=[D.client.project+' — my review','('+D.client.name+')',''],fin=[],voc=[],cov=[],notes=[];
     allTracks().forEach(function(x){
       var a=appr(x.t.id),loc=x.sub?x.cat+' / '+x.sub:x.cat,ttl=x.t.title;
       if(a.finalApproved)fin.push('✓ '+ttl+' ('+loc+')'); else if(a.cleanedApproved)voc.push('• '+ttl+' — vocal approved ('+loc+')');
+      if(a.artApproved)cov.push('✓ '+ttl+' ('+loc+')');
       if(a.cleanedNote)notes.push('• '+ttl+' [vocal]: '+a.cleanedNote);
       if(a.musicNote)notes.push('• '+ttl+' [music]: '+a.musicNote);
       if(a.finalNote)notes.push('• '+ttl+' [final]: '+a.finalNote);
+      if(a.artNote)notes.push('• '+ttl+' [cover]: '+a.artNote);
     });
     lines.push('FINAL APPROVED ('+fin.length+'):');lines=lines.concat(fin.length?fin:['(none yet)']);
     lines.push('','VOCAL APPROVED, awaiting final ('+voc.length+'):');lines=lines.concat(voc.length?voc:['(none)']);
+    lines.push('','COVER ART APPROVED ('+cov.length+'):');lines=lines.concat(cov.length?cov:['(none)']);
     lines.push('','NOTES / CHANGES ('+notes.length+'):');lines=lines.concat(notes.length?notes:['(none)']);
     var text=lines.join('\n'),btn=this,method=(D.contact&&D.contact.method)||'WhatsApp';
     if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function(){flash(btn,method);},function(){fb(text,btn,method);}); else fb(text,btn,method);
