@@ -57,7 +57,7 @@ function removeTrackById(project, id){
 function newTrack(project, title, raw){
   return {
     id: uniqueId(project, title), title: String(title).slice(0,200),
-    note: '',
+    note: '', description:'',
     raw: raw || 'received', cleaned:false, music:false, final:false, art:false,
     audio: { raw:'', cleaned:'', music:'', final:'' }, cover:''
   };
@@ -81,6 +81,7 @@ function normalizeProjectTracks(project){
   eachTrack(project, function(tr){
     if(!('art' in tr)){ tr.art=false; changed=true; }
     if(!('cover' in tr)){ tr.cover=''; changed=true; }
+    if(!('description' in tr)){ tr.description=''; changed=true; }
     if(!tr.audio){ tr.audio={raw:'',cleaned:'',music:'',final:''}; changed=true; }
     ['raw','cleaned','music','final'].forEach(function(k){ if(!(k in tr.audio)){ tr.audio[k]=''; changed=true; } });
     if('induction' in tr){ delete tr.induction; changed=true; }
@@ -120,6 +121,8 @@ function migrateData(data){
       if(!p.approvals){ p.approvals={}; changed=true; }
       if(!p.auth){ p.auth={}; changed=true; }
       if(typeof p.preparedBy!=='string'){ p.preparedBy='Craig Young'; changed=true; }
+      if(!('payUrl' in p)){ p.payUrl=''; changed=true; }
+      if(!('payLabel' in p)){ p.payLabel=''; changed=true; }
       if(normalizeProjectTracks(p)) changed=true;
     });
   });
@@ -242,7 +245,7 @@ app.get('/api/data', requireAuth, function(req,res){
   const proj=ctx.project, client=ctx.client;
   const out={ role:req.role, brand:DATA.brand,
     client:{ name:client.name },
-    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy },
+    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, payUrl:proj.payUrl||'', payLabel:proj.payLabel||'' },
     contact: client.contact || {method:'WhatsApp'},
     categories: proj.categories, approvals: proj.approvals };
   if(req.role==='admin'){
@@ -289,6 +292,7 @@ app.post('/api/track/:id', requireAdmin, function(req,res){
   ['cleaned','music','final','art'].forEach(function(k){ if(p[k]!=null) tr[k]=!!p[k]; });
   if(p.title!=null) tr.title = String(p.title).slice(0,200);
   ['note'].forEach(function(k){ if(p[k]!=null) tr[k]=String(p[k]).slice(0,300); });
+  if(p.description!=null) tr.description = String(p.description).slice(0,2000);
   saveData(DATA); res.json({ok:true, track:tr});
 });
 app.post('/api/track-add', requireAdmin, function(req,res){
@@ -363,6 +367,12 @@ app.post('/api/project-update', requireAdmin, function(req,res){
   if(p.name!=null && String(p.name).trim()) proj.name=String(p.name).trim().slice(0,140);
   if(p.intro!=null) proj.intro=String(p.intro).slice(0,2000);
   if(p.preparedBy!=null) proj.preparedBy=String(p.preparedBy).slice(0,120);
+  if(p.payUrl!=null){
+    var u=String(p.payUrl).trim().slice(0,500);
+    if(u==='' || /^https?:\/\//i.test(u)) proj.payUrl=u;
+    else return res.status(400).json({error:'Payment link must start with https://'});
+  }
+  if(p.payLabel!=null) proj.payLabel=String(p.payLabel).slice(0,120);
   saveData(DATA); res.json({ok:true});
 });
 app.post('/api/project-set-code', requireAdmin, function(req,res){

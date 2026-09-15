@@ -117,6 +117,17 @@
   .stage-head{display:flex;align-items:center;gap:10px;margin-bottom:4px}
   .stage-num{width:20px;height:20px;border-radius:50%;background:var(--navy);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
   .stage-name{font-size:13.5px;font-weight:600;color:var(--ink)}
+  .stage-info{font-size:11px;color:var(--muted);cursor:help;font-weight:400}
+  .piece-desc{font-size:13px;color:var(--ink);background:var(--bg);border:1px solid var(--line-soft);border-radius:10px;padding:11px 13px;margin-top:10px}
+  .piece-desc .pd-lbl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:4px}
+  /* Approve & Pay */
+  .pay-block{margin-top:12px;padding:14px 16px;border:1px solid var(--gold);border-radius:11px;background:#fffdf9}
+  .pay-block .pay-lbl{font-size:12.5px;color:var(--ink);margin-bottom:9px}
+  .pay-block .pay-lbl b{color:var(--navy)}
+  .pay-btn{display:inline-block;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;background:var(--gold);color:#fff;border:none;padding:11px 22px;border-radius:10px;text-decoration:none}
+  .pay-btn:hover{background:var(--gold-2)}
+  .pay-btn.disabled{opacity:.5;cursor:not-allowed;pointer-events:none}
+  .pay-note{font-size:11.5px;color:var(--muted);margin-top:8px}
   .stage-chip{margin-left:auto;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px}
   .stage-chip.done{color:var(--done);background:var(--done-bg)}
   .stage-chip.await{color:var(--await);background:var(--await-bg)}
@@ -271,7 +282,7 @@
           <div class="admin-hint" id="adminHint" style="display:none">Admin mode — upload audio to any stage and toggle when it's ready for the client to review.</div>
         </div>
         <div class="pipe-legend">
-          <div class="flow"><span>Raw</span><span class="arrow">→</span><span>Cleaned vocal</span><span class="arrow">→</span><span>Music</span><span class="arrow">→</span><span>Final</span></div>
+          <div class="flow"><span title="Your raw recording is in. Craig confirms it's good to produce, or flags a re-record.">Vocal Received</span><span class="arrow">→</span><span title="Craig's cleaned, produced version of your vocal. Approve it or request a change.">Produced Vocal</span><span class="arrow">→</span><span title="Your vocal set to music — pick the option you love.">Music Samples</span><span class="arrow">→</span><span title="Your cover artwork — upload your own or approve the studio-created design.">Cover Art</span><span class="arrow">→</span><span title="The finished master. Approve it and complete your purchase.">Final</span></div>
           <div class="keys">
             <span><i class="kdot await"></i> Awaiting client</span>
             <span><i class="kdot done"></i> Approved</span>
@@ -551,19 +562,23 @@
   // ---- Project settings (admin) ----
   function renderSettings(){
     var w=document.createElement('div');w.className='dash-sec';
-    w.innerHTML='<h3>Project settings</h3><div class="sec-note">Editing the active project — '+esc(D.project.name)+'. This is the header and intro the client sees.</div>'
+    w.innerHTML='<h3>Project settings</h3><div class="sec-note">Editing the active project — '+esc(D.project.name)+'. This is the header, intro and payment link the client sees.</div>'
       +'<div class="acct-form" style="flex-direction:column;align-items:stretch;max-width:560px">'
       +'<input id="stName" placeholder="Project name" value="'+esc(D.project.name)+'" />'
       +'<input id="stPrep" placeholder="Produced by" value="'+esc(D.project.preparedBy||'')+'" />'
       +'<textarea id="stIntro" placeholder="Client intro" style="font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;min-height:90px;resize:vertical">'+esc(D.project.intro||'')+'</textarea>'
+      +'<div class="lbl" style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-top:6px">Payment (Approve &amp; Pay button)</div>'
+      +'<input id="stPayUrl" placeholder="Stripe payment link (https://buy.stripe.com/...)" value="'+esc(D.project.payUrl||'')+'" />'
+      +'<input id="stPayLabel" placeholder="Price label shown to client (e.g. $400 USD · Preferred Client)" value="'+esc(D.project.payLabel||'')+'" />'
       +'<div><button class="mini-btn" id="stSave">Save settings</button></div>'
       +'</div><div class="acct-msg" id="stMsg"></div>';
     host.appendChild(w);
     document.getElementById('stSave').addEventListener('click',function(){
       var msg=document.getElementById('stMsg');
       var nameVal=document.getElementById('stName').value.trim(), introVal=document.getElementById('stIntro').value, prepVal=document.getElementById('stPrep').value.trim();
-      api('POST','/api/project-update',{projectId:D.project.id,name:nameVal,intro:introVal,preparedBy:prepVal})
-        .then(function(){ if(nameVal) D.project.name=nameVal; D.project.intro=introVal; D.project.preparedBy=prepVal; applyProjectChrome(); msg.className='acct-msg ok'; msg.textContent='Saved.'; })
+      var payUrlVal=document.getElementById('stPayUrl').value.trim(), payLabelVal=document.getElementById('stPayLabel').value.trim();
+      api('POST','/api/project-update',{projectId:D.project.id,name:nameVal,intro:introVal,preparedBy:prepVal,payUrl:payUrlVal,payLabel:payLabelVal})
+        .then(function(){ if(nameVal) D.project.name=nameVal; D.project.intro=introVal; D.project.preparedBy=prepVal; D.project.payUrl=payUrlVal; D.project.payLabel=payLabelVal; applyProjectChrome(); msg.className='acct-msg ok'; msg.textContent='Saved.'; })
         .catch(function(e){ msg.className='acct-msg err'; msg.textContent=(e&&e.error)||'Failed'; });
     });
   }
@@ -655,15 +670,16 @@
   }
   function detailsEditor(tr){
     var box=document.createElement('div');box.className='details-box';
-    box.innerHTML='<div class="lbl">Piece details</div>'
+    box.innerHTML='<div class="lbl">Project details</div>'
       +'<div class="details-grid">'
-      +'<input class="title" placeholder="Title" value="'+esc(tr.title)+'" />'
+      +'<input class="title" placeholder="Project name / title" value="'+esc(tr.title)+'" />'
       +'<button class="mini-btn" data-save>Save</button>'
       +'<button class="danger-btn" data-del>Remove piece</button>'
       +'</div>'
-      +'<input data-note placeholder="Internal note (optional)" style="margin-top:8px;width:100%;font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px" value="'+esc(tr.note||'')+'" />';
+      +'<textarea data-desc placeholder="Description (shown to the client)" style="margin-top:8px;width:100%;font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;min-height:56px;resize:vertical">'+esc(tr.description||'')+'</textarea>'
+      +'<input data-note placeholder="Internal note (private — client never sees this)" style="margin-top:8px;width:100%;font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px" value="'+esc(tr.note||'')+'" />';
     box.querySelector('[data-save]').addEventListener('click',function(){
-      api('POST','/api/track/'+tr.id,{ title:box.querySelector('.title').value.trim()||tr.title, note:box.querySelector('[data-note]').value.trim() }).then(reloadKeepOpen);
+      api('POST','/api/track/'+tr.id,{ title:box.querySelector('.title').value.trim()||tr.title, description:box.querySelector('[data-desc]').value.trim(), note:box.querySelector('[data-note]').value.trim() }).then(reloadKeepOpen);
     });
     box.querySelector('[data-del]').addEventListener('click',function(){
       if(confirm('Remove "'+tr.title+'"? This deletes the piece and any uploaded audio for it.')) api('POST','/api/track-delete',{id:tr.id}).then(function(){ openIds[tr.id]=0; reloadKeepOpen(); });
@@ -682,10 +698,16 @@
   function trackEl(tr){
     var wrap=document.createElement('div');wrap.className='track'+(appr(tr.id).finalApproved?' complete':'')+(openIds[tr.id]?' open':'');
     var st=steps(tr), lab=statusLabel(tr);
-    function stepHtml(cls,label,num){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
+    function stepHtml(cls,label,num,tip){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
     var row=document.createElement('div');row.className='row';
     row.innerHTML='<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+'</div></div>'
-      +'<div class="tracker">'+stepHtml(st.raw,'Raw',1)+stepHtml(st.cleaned,'Vocal',2)+stepHtml(st.music,'Music',3)+stepHtml(st.final,'Final',4)+stepHtml(st.art,'Cover',5)+'</div><div class="chev">▶</div>';
+      +'<div class="tracker">'
+        +stepHtml(st.raw,'Vocal',1,"Your raw recording is in. Craig confirms it's good to produce, or flags a re-record.")
+        +stepHtml(st.cleaned,'Produced',2,"Craig's cleaned, produced version of your vocal. Approve it or request a change.")
+        +stepHtml(st.music,'Music',3,"Your vocal set to music — up to three options, pick the one you love.")
+        +stepHtml(st.art,'Cover',4,"Your cover artwork — upload your own or approve the studio-created design.")
+        +stepHtml(st.final,'Final',5,"The finished master. Approve it and complete your purchase.")
+      +'</div><div class="chev">▶</div>';
     var expand=document.createElement('div');expand.className='expand';
     wrap.appendChild(row);wrap.appendChild(expand);
     var built=openIds[tr.id]; if(built) buildExpand(tr,expand);
@@ -696,9 +718,9 @@
     return wrap;
   }
 
-  function stageEl(num,name,chipCls,chipText){
+  function stageEl(num,name,chipCls,chipText,tip){
     var el=document.createElement('div');el.className='stage';
-    el.innerHTML='<div class="stage-head"><div class="stage-num">'+num+'</div><div class="stage-name">'+name+'</div><div class="stage-chip '+chipCls+'">'+chipText+'</div></div>';
+    el.innerHTML='<div class="stage-head"><div class="stage-num">'+num+'</div><div class="stage-name" title="'+esc(tip||'')+'">'+esc(name)+(tip?' <span class="stage-info" title="'+esc(tip)+'">ⓘ</span>':'')+'</div><div class="stage-chip '+chipCls+'">'+chipText+'</div></div>';
     return el;
   }
   function audioHtml(f){ return f?'<audio controls preload="none" src="audio/'+encodeURIComponent(f)+'"></audio>':'<div class="no-audio">No preview uploaded yet.</div>'; }
@@ -709,9 +731,16 @@
 
     if(vr()==='admin') expand.appendChild(detailsEditor(tr));
 
-    // Stage 1 — Raw
+    // client-visible description
+    if(tr.description){
+      var dsc=document.createElement('div');dsc.className='piece-desc';
+      dsc.innerHTML='<div class="pd-lbl">About this piece</div>'+esc(tr.description);
+      expand.appendChild(dsc);
+    }
+
+    // Stage 1 — Vocal Received
     var rawChip=tr.raw==='accepted'?['done','Accepted']:(tr.raw==='rerecord'?['alert','Re-record']:['lock','Received']);
-    var s1=stageEl('1','Raw vocal',rawChip[0],rawChip[1]);
+    var s1=stageEl('1','Vocal Received',rawChip[0],rawChip[1],"Your raw recording is in. Craig confirms it's good to produce, or flags a re-record.");
     if(tr.raw==='rerecord') s1.insertAdjacentHTML('beforeend','<div class="rerecord-banner">This recording needs to be re-recorded. Please record again and upload it below.</div>');
     else {
       var rawMsg = tr.raw==='accepted' ? 'Recording is in and accepted for production.'
@@ -722,25 +751,47 @@
     s1.appendChild(uploadRow(tr,'raw', vr()==='client' ? (tr.raw==='rerecord'?'Re-record and upload':'Upload your recording') : "Upload raw recording (on client's behalf)"));
     if(vr()==='admin'){
       var ab=document.createElement('div');ab.className='admin-box';
-      ab.innerHTML='<div class="lbl">Admin</div><div class="admin-row">Raw status: <select data-raw><option value="received">Received</option><option value="accepted">Accepted</option><option value="rerecord">Needs re-record</option></select></div>';
+      ab.innerHTML='<div class="lbl">Admin</div><div class="admin-row">Vocal status: <select data-raw><option value="received">Received</option><option value="accepted">Accepted</option><option value="rerecord">Needs re-record</option></select></div>';
       ab.querySelector('[data-raw]').value=tr.raw;
       ab.querySelector('[data-raw]').addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{raw:this.value}).then(reloadKeepOpen); });
       s1.appendChild(ab);
     }
     expand.appendChild(s1);
 
-    // Stage 2,3,4
-    expand.appendChild(clientStage(tr,'2','Cleaned vocal','cleaned','Listen and approve the cleaned vocal, or ask for a fix.','I will clean the vocal here once the raw is accepted.'));
-    expand.appendChild(clientStage(tr,'3','Suggested music','music','Preview the music. Optional note if you have thoughts.','The suggested music comes after the vocal is approved.'));
-    expand.appendChild(clientStage(tr,'4','Final production','final','Give your final approval, or leave a note.','The final production comes together after the music.'));
-    expand.appendChild(artStage(tr));
+    // Stages 2–5 (Cover Art now sits before Final Production)
+    expand.appendChild(clientStage(tr,'2','Produced Vocal','cleaned','Listen and approve the produced vocal, or ask for a fix.','Craig produces the vocal here once the recording is accepted.',"Craig's cleaned, produced version of your vocal. Approve it or request a change."));
+    expand.appendChild(clientStage(tr,'3','Music Samples','music','Preview your vocal set to music, then leave a note with the option you love.','Your music samples come after the produced vocal is approved.',"Your vocal set to music — up to three options, pick the one you love."));
+    expand.appendChild(artStage(tr,'4'));
+    expand.appendChild(clientStage(tr,'5','Final Production','final','Give your final approval, or leave a note.','The final production comes together after you choose your music.',"The finished master. Approve it and complete your purchase."));
+    var pb=payBlock(tr); if(pb) expand.appendChild(pb);
+  }
+
+  // Approve & Pay — client sees it once they approve the final; admin sees the config reminder.
+  function payBlock(tr){
+    var a=appr(tr.id), payUrl=D.project.payUrl, payLabel=D.project.payLabel||'';
+    if(vr()==='client'){
+      if(!a.finalApproved) return null;
+      var el=document.createElement('div');el.className='pay-block';
+      var h='<div class="pay-lbl">You have approved the final master.'+(payLabel?' <b>'+esc(payLabel)+'</b>':'')+'</div>';
+      if(payUrl) h+='<a class="pay-btn" href="'+esc(payUrl)+'" target="_blank" rel="noopener">Approve &amp; Pay</a>';
+      else h+='<span class="pay-btn disabled">Approve &amp; Pay</span><div class="pay-note">Payment link is being finalised.</div>';
+      el.innerHTML=h; return el;
+    }
+    if(vr()==='admin' && tr.final){
+      var el2=document.createElement('div');el2.className='pay-block';
+      el2.innerHTML='<div class="pay-lbl">Payment — shown to the client once they approve the final.</div>'
+        +(payUrl?'<div class="pay-note">Pay link set'+(payLabel?' · '+esc(payLabel):'')+'. Change it in <b>Settings</b>.</div>'
+                :'<div class="pay-note">No pay link yet — add your Stripe link in <b>Settings</b> so Approve &amp; Pay works.</div>');
+      return el2;
+    }
+    return null;
   }
 
   // Stage 5 — cover artwork (image, approved like the audio stages)
-  function artStage(tr){
+  function artStage(tr,num){
     var a=appr(tr.id), ready=!!tr.art, file=tr.cover, approved=!!a.artApproved;
     var chip = !ready?['lock','In progress']:(approved?['done','Approved']:['await','Awaiting client']);
-    var el=stageEl('5','Cover artwork',chip[0],chip[1]);
+    var el=stageEl(num||'4','Cover Art',chip[0],chip[1],"Your cover artwork — upload your own or approve the studio-created design.");
     if(ready){
       el.insertAdjacentHTML('beforeend', file?'<img class="cover-img" src="media/'+encodeURIComponent(file)+'" alt="cover artwork" />':'<div class="no-cover">No cover uploaded yet.</div>');
       if(vr()==='client'){
@@ -758,11 +809,11 @@
         el.insertAdjacentHTML('beforeend','<div class="client-note-view"><b>Client note:</b> '+esc(a.artNote)+'</div>');
       }
     }else{
-      el.insertAdjacentHTML('beforeend','<div class="stage-body">The cover artwork comes together with the final production.</div>');
+      el.insertAdjacentHTML('beforeend','<div class="stage-body">Your cover art comes together just before the final production.</div>');
     }
     if(vr()==='admin'){
       var ab=document.createElement('div');ab.className='admin-box';
-      ab.innerHTML='<div class="lbl">Admin — Cover artwork</div>'
+      ab.innerHTML='<div class="lbl">Admin — Cover Art</div>'
         +'<div class="admin-row"><input type="file" accept="image/*" data-file><button class="mini-btn" data-up>Upload cover</button><span class="uling" data-cur>'+(file?('current: '+esc(file)):'no cover yet')+'</span></div>'
         +'<div class="admin-row"><label class="toggle-lbl"><input type="checkbox" data-ready '+(ready?'checked':'')+'> Ready for client to review</label></div>';
       var fileInput=ab.querySelector('[data-file]'), upBtn=ab.querySelector('[data-up]'), readyCb=ab.querySelector('[data-ready]');
@@ -779,13 +830,13 @@
     return el;
   }
 
-  function clientStage(tr,num,name,stage,readyHint,lockHint){
+  function clientStage(tr,num,name,stage,readyHint,lockHint,tip){
     var a=appr(tr.id), ready=!!tr[stage], file=tr.audio[stage];
     var isApproveStage=(stage==='cleaned'||stage==='final');
     var approvedKey=stage==='cleaned'?'cleanedApproved':'finalApproved';
     var approved=!!a[approvedKey];
     var chip = !ready?['lock','In progress']:(stage==='music'?(a.musicSeen?['done','Previewed']:['await','Ready to preview']):(approved?['done','Approved']:['await','Awaiting client']));
-    var el=stageEl(num,name,chip[0],chip[1]);
+    var el=stageEl(num,name,chip[0],chip[1],tip);
 
     if(ready){
       el.insertAdjacentHTML('beforeend',audioHtml(file));
