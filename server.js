@@ -59,6 +59,7 @@ function newTrack(project, title, raw){
     id: uniqueId(project, title), title: String(title).slice(0,200),
     note: '', description:'',
     raw: raw || 'received', cleaned:false, music:false, final:false, art:false,
+    samples: ['','',''], recommended:0,
     audio: { raw:'', cleaned:'', music:'', final:'' }, cover:''
   };
 }
@@ -82,6 +83,9 @@ function normalizeProjectTracks(project){
     if(!('art' in tr)){ tr.art=false; changed=true; }
     if(!('cover' in tr)){ tr.cover=''; changed=true; }
     if(!('description' in tr)){ tr.description=''; changed=true; }
+    if(!Array.isArray(tr.samples)){ tr.samples=['','','']; if(tr.audio && tr.audio.music) tr.samples[0]=tr.audio.music; changed=true; }
+    while(tr.samples.length<3){ tr.samples.push(''); changed=true; }
+    if(!('recommended' in tr)){ tr.recommended=0; changed=true; }
     if(!tr.audio){ tr.audio={raw:'',cleaned:'',music:'',final:''}; changed=true; }
     ['raw','cleaned','music','final'].forEach(function(k){ if(!(k in tr.audio)){ tr.audio[k]=''; changed=true; } });
     if('induction' in tr){ delete tr.induction; changed=true; }
@@ -262,9 +266,11 @@ app.get('/api/data', requireAuth, function(req,res){
 app.post('/api/approve', requireAuth, function(req,res){
   const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
   const proj=ctx.project, {trackId, stage, approved} = req.body||{};
-  if(['cleaned','final','art'].indexOf(stage)<0) return res.status(400).json({error:'bad stage'});
+  if(['cleaned','final','art','levels','wording'].indexOf(stage)<0) return res.status(400).json({error:'bad stage'});
   const a = proj.approvals[trackId] || (proj.approvals[trackId]={});
   a[stage+'Approved'] = !!approved;
+  // Final is approved only when BOTH levels and wording are approved.
+  if(stage==='levels'||stage==='wording'){ a.finalApproved = !!(a.levelsApproved && a.wordingApproved); }
   saveData(DATA); res.json({ok:true, approvals:proj.approvals[trackId]});
 });
 app.post('/api/note', requireAuth, function(req,res){
@@ -281,6 +287,23 @@ app.post('/api/music-seen', requireAuth, function(req,res){
   const a = proj.approvals[trackId] || (proj.approvals[trackId]={});
   a.musicSeen = !!seen; saveData(DATA); res.json({ok:true});
 });
+// client picks one of the (up to 3) music samples
+app.post('/api/select-sample', requireAuth, function(req,res){
+  const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
+  const proj=ctx.project, {trackId, index} = req.body||{};
+  var i=parseInt(index,10); if(!(i>=0&&i<=2)) i=-1;
+  const a = proj.approvals[trackId] || (proj.approvals[trackId]={});
+  a.musicSelected = i; a.musicSeen = i>=0; saveData(DATA); res.json({ok:true, approvals:a});
+});
+// client submits final metadata (title/artist/album/genre/year)
+app.post('/api/metadata', requireAuth, function(req,res){
+  const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
+  const proj=ctx.project, {trackId, metadata} = req.body||{};
+  const m = metadata||{}, s=function(v,n){ return String(v==null?'':v).slice(0,n); };
+  const a = proj.approvals[trackId] || (proj.approvals[trackId]={});
+  a.metadata = { title:s(m.title,200), artist:s(m.artist,200), album:s(m.album,200), genre:s(m.genre,80), year:s(m.year,10) };
+  saveData(DATA); res.json({ok:true, metadata:a.metadata});
+});
 
 // ---- admin: piece edits (operate on the active project) ----
 app.post('/api/track/:id', requireAdmin, function(req,res){
@@ -293,6 +316,7 @@ app.post('/api/track/:id', requireAdmin, function(req,res){
   if(p.title!=null) tr.title = String(p.title).slice(0,200);
   ['note'].forEach(function(k){ if(p[k]!=null) tr[k]=String(p[k]).slice(0,300); });
   if(p.description!=null) tr.description = String(p.description).slice(0,2000);
+  if(p.recommended!=null){ var ri=parseInt(p.recommended,10); if(ri>=0&&ri<=2) tr.recommended=ri; }
   saveData(DATA); res.json({ok:true, track:tr});
 });
 app.post('/api/track-add', requireAdmin, function(req,res){
@@ -314,6 +338,7 @@ app.post('/api/track-delete', requireAdmin, function(req,res){
     var f = removed.audio && removed.audio[stage];
     if(f){ try{ fs.unlinkSync(path.join(AUDIO_DIR, f)); }catch(e){} }
   });
+  (removed.samples||[]).forEach(function(f){ if(f){ try{ fs.unlinkSync(path.join(AUDIO_DIR, f)); }catch(e){} } });
   if(removed.cover){ try{ fs.unlinkSync(path.join(AUDIO_DIR, removed.cover)); }catch(e){} }
   saveData(DATA); res.json({ok:true});
 });
@@ -404,12 +429,20 @@ app.post('/api/upload', requireAuth, upload.single('file'), function(req,res){
   if(!tr){ cleanup(); return res.status(404).json({error:'no track'}); }
   if(!req.file) return res.status(400).json({error:'no file'});
   const ext = path.extname(req.file.originalname||'') || (stage==='art'?'.png':'.mp3');
-  const finalName = proj.id+'-'+trackId+'-'+stage+ext;   // namespaced so projects never collide
+  var si = -1;
+  if(stage==='music'){ si=parseInt((req.body||{}).sampleIndex,10); if(!(si>=0&&si<=2)) si=0; }
+  const finalName = proj.id+'-'+trackId+'-'+stage+(stage==='music'?si:'')+ext;   // namespaced so projects never collide
   const dest = path.join(AUDIO_DIR, finalName);
   try{ if(fs.existsSync(dest)) fs.unlinkSync(dest); fs.renameSync(req.file.path, dest); }
   catch(e){ return res.status(500).json({error:'save failed'}); }
   if(stage==='art'){
     tr.cover = finalName; tr.art = true;
+  }else if(stage==='music'){
+    if(!Array.isArray(tr.samples)) tr.samples=['','',''];
+    tr.samples[si] = finalName;
+    if(!tr.audio) tr.audio={};
+    tr.audio.music = tr.audio.music || finalName;   // keep a legacy single-file pointer
+    tr.music = true;                                // ready once a sample lands (admin can untoggle)
   }else{
     if(!tr.audio) tr.audio={};
     tr.audio[stage] = finalName;

@@ -128,6 +128,20 @@
   .pay-btn:hover{background:var(--gold-2)}
   .pay-btn.disabled{opacity:.5;cursor:not-allowed;pointer-events:none}
   .pay-note{font-size:11.5px;color:var(--muted);margin-top:8px}
+  /* Music samples */
+  .sample{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;background:#fff}
+  .sample.chosen{border-color:var(--done);background:var(--done-bg)}
+  .sample-head{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--ink);flex-wrap:wrap}
+  .sample-rec{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);background:var(--await-bg);padding:2px 8px;border-radius:20px}
+  .choose-btn{font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--done);background:#fff;color:var(--done);padding:6px 12px;border-radius:8px;margin-top:6px}
+  .choose-btn.on{background:var(--done);color:#fff}
+  .choose-btn:disabled{opacity:.5;cursor:default}
+  /* Final metadata + dual approve */
+  .dual-approve{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .meta-form{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .meta-form input{font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px}
+  .meta-form .full{grid-column:1 / -1}
+  .meta-view{font-size:12.5px;color:var(--ink);background:var(--bg);border:1px solid var(--line-soft);border-radius:9px;padding:9px 11px;margin-top:8px}
   .stage-chip{margin-left:auto;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px}
   .stage-chip.done{color:var(--done);background:var(--done-bg)}
   .stage-chip.await{color:var(--await);background:var(--await-bg)}
@@ -760,9 +774,9 @@
 
     // Stages 2–5 (Cover Art now sits before Final Production)
     expand.appendChild(clientStage(tr,'2','Produced Vocal','cleaned','Listen and approve the produced vocal, or ask for a fix.','Craig produces the vocal here once the recording is accepted.',"Craig's cleaned, produced version of your vocal. Approve it or request a change."));
-    expand.appendChild(clientStage(tr,'3','Music Samples','music','Preview your vocal set to music, then leave a note with the option you love.','Your music samples come after the produced vocal is approved.',"Your vocal set to music — up to three options, pick the one you love."));
+    expand.appendChild(musicSamplesStage(tr,'3'));
     expand.appendChild(artStage(tr,'4'));
-    expand.appendChild(clientStage(tr,'5','Final Production','final','Give your final approval, or leave a note.','The final production comes together after you choose your music.',"The finished master. Approve it and complete your purchase."));
+    expand.appendChild(finalStage(tr,'5'));
     var pb=payBlock(tr); if(pb) expand.appendChild(pb);
   }
 
@@ -887,6 +901,155 @@
           .catch(function(){ upBtn.disabled=false;upBtn.textContent='Upload'; alert('Upload failed'); });
       });
       readyCb.addEventListener('change',function(){ var patch={};patch[stage]=readyCb.checked; api('POST','/api/track/'+tr.id,patch).then(reloadKeepOpen); });
+      el.appendChild(ab);
+    }
+    return el;
+  }
+
+  // Stage 3 — Music Samples: up to 3 vocal+music options, one recommended; client picks one.
+  function musicSamplesStage(tr,num){
+    var a=appr(tr.id), ready=!!tr.music;
+    var samples=Array.isArray(tr.samples)?tr.samples:[];
+    var rec=(typeof tr.recommended==='number')?tr.recommended:0;
+    var sel=(typeof a.musicSelected==='number')?a.musicSelected:-1;
+    var chip = !ready?['lock','In progress']:(sel>=0?['done','Selected']:['await','Choose your music']);
+    var el=stageEl(num,'Music Samples',chip[0],chip[1],"Your vocal set to music — up to three options, pick the one you love.");
+
+    if(ready){
+      var anyFile=false;
+      samples.forEach(function(f,i){
+        if(!f) return; anyFile=true;
+        var chosen=(sel===i);
+        var box=document.createElement('div');box.className='sample'+(chosen?' chosen':'');
+        box.innerHTML='<div class="sample-head">Option '+(i+1)
+          +(i===rec?' <span class="sample-rec">Recommended</span>':'')
+          +(chosen?' <span class="sample-rec" style="color:var(--done);background:var(--done-bg)">Your pick ✓</span>':'')
+          +'</div>'+audioHtml(f);
+        if(vr()==='client'){
+          var cb=document.createElement('button');cb.className='choose-btn'+(chosen?' on':'');cb.textContent=chosen?'Chosen ✓':'Choose this one';
+          box.appendChild(cb);
+          if(!PREVIEW){ cb.addEventListener('click',function(){ api('POST','/api/select-sample',{trackId:tr.id,index:(chosen?-1:i)}).then(reloadKeepOpen); }); }
+          else { cb.disabled=true; cb.title='Read-only preview — log in with the client code to choose'; }
+        }
+        el.appendChild(box);
+      });
+      if(!anyFile) el.insertAdjacentHTML('beforeend','<div class="no-audio">Samples coming soon.</div>');
+      if(vr()==='client'){
+        var actions=document.createElement('div');actions.className='stage-actions';
+        actions.innerHTML='<button class="note-toggle">Add a note on the music</button>';
+        el.appendChild(actions);
+        var nb=document.createElement('textarea');nb.className='note-box'+((a.musicNote)?' open':'');nb.placeholder='Any thoughts on the music?';nb.value=a.musicNote||'';
+        el.appendChild(nb);
+        actions.querySelector('.note-toggle').addEventListener('click',function(){ nb.classList.toggle('open'); if(nb.classList.contains('open')) nb.focus(); });
+        if(!PREVIEW){ nb.addEventListener('change',function(){ api('POST','/api/note',{trackId:tr.id,stage:'music',note:nb.value.trim()}).then(function(){ a.musicNote=nb.value.trim(); refreshBar(); }); }); }
+        else { nb.readOnly=true; nb.title='Read-only preview'; }
+      } else if(a.musicNote){
+        el.insertAdjacentHTML('beforeend','<div class="client-note-view"><b>Client note:</b> '+esc(a.musicNote)+'</div>');
+      }
+    } else {
+      el.insertAdjacentHTML('beforeend','<div class="stage-body">Your music samples come after the produced vocal is approved.</div>');
+    }
+
+    if(vr()==='admin'){
+      var ab=document.createElement('div');ab.className='admin-box';
+      ab.innerHTML='<div class="lbl">Admin — Music Samples (up to 3, mark one recommended)</div>';
+      [0,1,2].forEach(function(i){
+        var cur=samples[i];
+        var row=document.createElement('div');row.className='admin-row';
+        row.innerHTML='<label class="toggle-lbl" style="min-width:70px"><input type="radio" name="rec-'+esc(tr.id)+'" '+(i===rec?'checked':'')+' data-rec="'+i+'"> Rec.</label>'
+          +'<span style="font-size:12px;min-width:56px">Option '+(i+1)+'</span>'
+          +'<input type="file" accept="audio/*" data-file="'+i+'"><button class="mini-btn" data-up="'+i+'">Upload</button>'
+          +'<span class="uling">'+(cur?('current: '+esc(cur)):'no file')+'</span>';
+        ab.appendChild(row);
+      });
+      var readyRow=document.createElement('div');readyRow.className='admin-row';
+      readyRow.innerHTML='<label class="toggle-lbl"><input type="checkbox" data-ready '+(ready?'checked':'')+'> Ready for client to review</label>';
+      ab.appendChild(readyRow);
+      ab.querySelectorAll('[data-rec]').forEach(function(r){ r.addEventListener('change',function(){ if(r.checked) api('POST','/api/track/'+tr.id,{recommended:parseInt(r.getAttribute('data-rec'),10)}).then(reloadKeepOpen); }); });
+      ab.querySelectorAll('[data-up]').forEach(function(btn){
+        btn.addEventListener('click',function(){
+          var i=btn.getAttribute('data-up'), fi=ab.querySelector('[data-file="'+i+'"]');
+          if(!fi.files||!fi.files[0]) return;
+          btn.disabled=true;btn.textContent='Uploading…';
+          var fd=new FormData();fd.append('file',fi.files[0]);fd.append('trackId',tr.id);fd.append('stage','music');fd.append('sampleIndex',i);
+          fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){ if(j.error) throw j; reloadKeepOpen(); })
+            .catch(function(){ btn.disabled=false;btn.textContent='Upload'; alert('Upload failed'); });
+        });
+      });
+      ab.querySelector('[data-ready]').addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{music:this.checked}).then(reloadKeepOpen); });
+      el.appendChild(ab);
+    }
+    return el;
+  }
+
+  // Stage 5 — Final Production: dual approval (levels + wording) + client metadata; pay unlocks when both approved.
+  function finalStage(tr,num){
+    var a=appr(tr.id), ready=!!tr.final, file=tr.audio.final;
+    var levels=!!a.levelsApproved, wording=!!a.wordingApproved, approved=levels&&wording;
+    var chip = !ready?['lock','In progress']:(approved?['done','Approved']:['await','Awaiting client']);
+    var el=stageEl(num,'Final Production',chip[0],chip[1],"The finished master. Approve the levels and the wording, add your metadata, then complete your purchase.");
+
+    if(ready){
+      el.insertAdjacentHTML('beforeend',audioHtml(file));
+      if(vr()==='client'){
+        var dual=document.createElement('div');dual.className='dual-approve';
+        dual.innerHTML='<button class="approve-btn'+(levels?' on':'')+'" data-lev>'+(levels?'Levels approved ✓':'Approve levels')+'</button>'
+          +'<button class="approve-btn'+(wording?' on':'')+'" data-word>'+(wording?'Wording approved ✓':'Approve wording')+'</button>'
+          +'<button class="note-toggle" data-notet>Request a change</button>';
+        el.appendChild(dual);
+        var nb=document.createElement('textarea');nb.className='note-box'+((a.finalNote)?' open':'');nb.placeholder='What would you like changed?';nb.value=a.finalNote||'';
+        el.appendChild(nb);
+        var m=a.metadata||{};
+        el.insertAdjacentHTML('beforeend','<div class="uling" style="margin-top:10px">Your track details (carried into the finished file):</div>');
+        var mf=document.createElement('div');mf.className='meta-form';
+        mf.innerHTML='<input class="full" data-m="title" placeholder="Title" value="'+esc(m.title||'')+'">'
+          +'<input data-m="artist" placeholder="Artist" value="'+esc(m.artist||'')+'">'
+          +'<input data-m="album" placeholder="Album / collection" value="'+esc(m.album||'')+'">'
+          +'<input data-m="genre" placeholder="Genre" value="'+esc(m.genre||'')+'">'
+          +'<input data-m="year" placeholder="Year" value="'+esc(m.year||'')+'">'
+          +'<button class="mini-btn full" data-msave style="justify-self:start">Save metadata</button>';
+        el.appendChild(mf);
+        dual.querySelector('[data-notet]').addEventListener('click',function(){ nb.classList.toggle('open'); if(nb.classList.contains('open')) nb.focus(); });
+        if(!PREVIEW){
+          dual.querySelector('[data-lev]').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:'levels',approved:!levels}).then(reloadKeepOpen); });
+          dual.querySelector('[data-word]').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:'wording',approved:!wording}).then(reloadKeepOpen); });
+          nb.addEventListener('change',function(){ api('POST','/api/note',{trackId:tr.id,stage:'final',note:nb.value.trim()}).then(function(){ a.finalNote=nb.value.trim(); refreshBar(); }); });
+          mf.querySelector('[data-msave]').addEventListener('click',function(){
+            var md={}; mf.querySelectorAll('[data-m]').forEach(function(inp){ md[inp.getAttribute('data-m')]=inp.value.trim(); });
+            var btn=mf.querySelector('[data-msave]'); btn.disabled=true; btn.textContent='Saving…';
+            api('POST','/api/metadata',{trackId:tr.id,metadata:md}).then(function(){ a.metadata=md; btn.textContent='Saved ✓'; setTimeout(function(){ btn.disabled=false; btn.textContent='Save metadata'; },1600); })
+              .catch(function(){ btn.disabled=false; btn.textContent='Save metadata'; alert('Save failed'); });
+          });
+        } else {
+          dual.querySelectorAll('button').forEach(function(b){ b.disabled=true; });
+          nb.readOnly=true; mf.querySelectorAll('input,button').forEach(function(x){ x.disabled=true; });
+        }
+      } else {
+        el.insertAdjacentHTML('beforeend','<div class="uling" style="margin-top:8px">Client approvals — levels '+(levels?'✓':'—')+' · wording '+(wording?'✓':'—')+'</div>');
+        var m2=a.metadata||{};
+        if(m2.title||m2.artist||m2.album||m2.genre||m2.year){
+          el.insertAdjacentHTML('beforeend','<div class="meta-view"><b>Client metadata:</b> '+esc([m2.title,m2.artist,m2.album,m2.genre,m2.year].filter(Boolean).join(' · '))+'</div>');
+        }
+        if(a.finalNote) el.insertAdjacentHTML('beforeend','<div class="client-note-view"><b>Client note:</b> '+esc(a.finalNote)+'</div>');
+      }
+    } else {
+      el.insertAdjacentHTML('beforeend','<div class="stage-body">The final production comes together after you choose your music.</div>');
+    }
+
+    if(vr()==='admin'){
+      var ab=document.createElement('div');ab.className='admin-box';
+      ab.innerHTML='<div class="lbl">Admin — Final Production</div>'
+        +'<div class="admin-row"><input type="file" accept="audio/*" data-file><button class="mini-btn" data-up>Upload</button><span class="uling">'+(file?('current: '+esc(file)):'no file yet')+'</span></div>'
+        +'<div class="admin-row"><label class="toggle-lbl"><input type="checkbox" data-ready '+(ready?'checked':'')+'> Ready for client to review</label></div>';
+      var fileInput=ab.querySelector('[data-file]'), upBtn=ab.querySelector('[data-up]'), readyCb=ab.querySelector('[data-ready]');
+      upBtn.addEventListener('click',function(){
+        if(!fileInput.files||!fileInput.files[0]) return;
+        upBtn.disabled=true;upBtn.textContent='Uploading…';
+        var fd=new FormData();fd.append('file',fileInput.files[0]);fd.append('trackId',tr.id);fd.append('stage','final');
+        fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(){ reloadKeepOpen(); })
+          .catch(function(){ upBtn.disabled=false;upBtn.textContent='Upload'; alert('Upload failed'); });
+      });
+      readyCb.addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{final:readyCb.checked}).then(reloadKeepOpen); });
       el.appendChild(ab);
     }
     return el;
