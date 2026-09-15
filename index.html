@@ -766,15 +766,21 @@
     var pb=payBlock(tr); if(pb) expand.appendChild(pb);
   }
 
-  // Approve & Pay — client sees it once they approve the final; admin sees the config reminder.
+  // Approve & Pay — client sees a grayed button once the Final master is ready; it activates on approval.
   function payBlock(tr){
     var a=appr(tr.id), payUrl=D.project.payUrl, payLabel=D.project.payLabel||'';
     if(vr()==='client'){
-      if(!a.finalApproved) return null;
+      if(!tr.final) return null;                 // only once the final master is released
+      var approved=!!a.finalApproved;
       var el=document.createElement('div');el.className='pay-block';
-      var h='<div class="pay-lbl">You have approved the final master.'+(payLabel?' <b>'+esc(payLabel)+'</b>':'')+'</div>';
-      if(payUrl) h+='<a class="pay-btn" href="'+esc(payUrl)+'" target="_blank" rel="noopener">Approve &amp; Pay</a>';
-      else h+='<span class="pay-btn disabled">Approve &amp; Pay</span><div class="pay-note">Payment link is being finalised.</div>';
+      var h='<div class="pay-lbl">'+(approved?'You have approved the final master.':'Approve the final master above to complete your purchase.')+(payLabel?' <b>'+esc(payLabel)+'</b>':'')+'</div>';
+      if(approved && payUrl){
+        h+='<a class="pay-btn" href="'+esc(payUrl)+'" target="_blank" rel="noopener">Approve &amp; Pay</a>';
+      }else if(approved && !payUrl){
+        h+='<span class="pay-btn disabled">Approve &amp; Pay</span><div class="pay-note">Payment link is being finalised.</div>';
+      }else{
+        h+='<span class="pay-btn disabled">Approve &amp; Pay</span><div class="pay-note">Available once you approve the final master above.</div>';
+      }
       el.innerHTML=h; return el;
     }
     if(vr()==='admin' && tr.final){
