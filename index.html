@@ -714,10 +714,16 @@
     var wrap=document.createElement('div');wrap.className='track'+(appr(tr.id).finalApproved?' complete':'')+(openIds[tr.id]?' open':'');
     var st=steps(tr), lab=statusLabel(tr);
     function stepHtml(cls,label,num,tip){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
+    // Vocal tooltip must reflect the real state — never claim a recording is in / approved when it isn't.
+    var hasRaw = !!(tr.audio && tr.audio.raw);
+    var rawTip = st.raw==='alert' ? "This recording needs to be re-recorded — please record again and upload it."
+               : st.raw==='done'  ? "Your recording is in and approved for production."
+               : hasRaw           ? "Your recording is in, awaiting Craig's quality check."
+               :                     "Waiting on your recording to begin production.";
     var row=document.createElement('div');row.className='row';
     row.innerHTML='<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+'</div></div>'
       +'<div class="tracker">'
-        +stepHtml(st.raw,'Vocal',1,"Your raw recording is in. Craig confirms it's good to produce, or flags a re-record.")
+        +stepHtml(st.raw,'Vocal',1,rawTip)
         +stepHtml(st.cleaned,'Produced',2,"Craig's cleaned, produced version of your vocal. Approve it or request a change.")
         +stepHtml(st.music,'Music',3,"Your vocal set to music — up to three options, pick the one you love.")
         +stepHtml(st.art,'Cover',4,"Your cover artwork — upload your own or approve the studio-created design.")
@@ -758,8 +764,10 @@
     var s1=stageEl('1','Vocal Received',rawChip[0],rawChip[1],"Your raw recording is in. Craig approves the recording quality so it can go into production, or flags a re-record.");
     if(tr.raw==='rerecord') s1.insertAdjacentHTML('beforeend','<div class="rerecord-banner">This recording needs to be re-recorded. Please record again and upload it below.</div>');
     else {
+      var hasRawFile = !!(tr.audio && tr.audio.raw);
       var rawMsg = tr.raw==='accepted' ? 'Recording is in and approved for production.'
-                 : (vr()==='client' ? 'Upload your recording here so it can go into production.' : 'Recording is in, awaiting your review.');
+                 : (vr()==='client' ? 'Upload your recording here so it can go into production.'
+                 : (hasRawFile ? 'Recording is in, awaiting your review.' : 'No recording uploaded yet.'));
       s1.insertAdjacentHTML('beforeend','<div class="stage-body">'+rawMsg+'</div>');
     }
     if(tr.audio && tr.audio.raw) s1.insertAdjacentHTML('beforeend', audioHtml(tr.audio.raw));
