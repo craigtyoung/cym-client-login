@@ -374,7 +374,8 @@
     document.getElementById('ibTitle').textContent=D.project.name;
     document.getElementById('ibSub').textContent='Prepared for '+D.client.name+'  ·  produced by '+(D.project.preparedBy||'Craig Young');
     document.getElementById('ibIntro').textContent=D.project.intro||'';
-    document.getElementById('copyBtn').textContent=(D.contact&&D.contact.label)?D.contact.label:'Copy my approvals to send to Craig';
+    document.getElementById('copyBtn').textContent=(D.contact&&D.contact.label)?D.contact.label:'Copy my approvals';
+    document.getElementById('copyBtn').style.display = vr()==='admin' ? 'none' : '';
     document.getElementById('previewBanner').textContent='Previewing as '+D.client.name+' — exactly what the client sees. Read-only: to actually approve or request a change, log in with the client code.';
   }
   function syncViewChrome(){
@@ -412,7 +413,7 @@
     if(tr.final && !a.finalApproved) return ['Final ready for approval','await'];
     if(tr.cleaned && !a.cleanedApproved) return ['Vocal ready for approval','await'];
     if(tr.cleaned && a.cleanedApproved) return ['In production — music & final','neutral'];
-    if(tr.raw==='accepted') return ['Accepted, in production','neutral'];
+    if(tr.raw==='accepted') return ['Approved — in production','neutral'];
     return ['Received','neutral'];
   }
 
@@ -606,7 +607,7 @@
       var tr=x.t, a=appr(tr.id), loc=x.sub?x.cat+' / '+x.sub:x.cat;
       if(a.finalApproved) finalApproved++;
       if(a.artApproved) coversApproved++;
-      if(tr.raw==='received'){ rawToAccept++; attention.push({tag:'To accept',cls:'await',title:tr.title,sub:loc+'  ·  raw recording is in — accept it into production'}); }
+      if(tr.raw==='received'){ rawToAccept++; attention.push({tag:'To approve',cls:'await',title:tr.title,sub:loc+'  ·  raw recording is in — approve the quality to send it into production'}); }
       if(tr.raw==='rerecord') attention.push({tag:'Re-record',cls:'alert',title:tr.title,sub:loc+'  ·  flagged for re-record'});
       if(tr.cleaned && !a.cleanedApproved) awaitingClient++;
       if(tr.final && !a.finalApproved) awaitingClient++;
@@ -619,7 +620,7 @@
     var ch='<div class="dash-cards">';
     cards.forEach(function(c){ ch+='<div class="dash-card '+c[2]+'"><div class="dc-num">'+c[1]+'</div><div class="dc-lbl">'+c[0]+'</div></div>'; });
     ch+='</div>';
-    var at='<div class="dash-sec"><h3>Needs your attention</h3><div class="sec-note">Raw recordings to accept, re-records, and every change the client has requested.</div>';
+    var at='<div class="dash-sec"><h3>Needs your attention</h3><div class="sec-note">Raw recordings to approve, re-records, and every change the client has requested.</div>';
     if(attention.length) attention.forEach(function(it){ at+='<div class="dash-item"><span class="di-tag '+it.cls+'">'+esc(it.tag)+'</span><div class="di-body"><div class="di-title">'+esc(it.title)+'</div><div class="di-sub">'+esc(it.sub)+'</div></div></div>'; });
     else at+='<div class="dash-empty">Nothing waiting on you. Everything is with the client or complete.</div>';
     at+='</div>';
@@ -753,11 +754,11 @@
     }
 
     // Stage 1 — Vocal Received
-    var rawChip=tr.raw==='accepted'?['done','Accepted']:(tr.raw==='rerecord'?['alert','Re-record']:['lock','Received']);
-    var s1=stageEl('1','Vocal Received',rawChip[0],rawChip[1],"Your raw recording is in. Craig confirms it's good to produce, or flags a re-record.");
+    var rawChip=tr.raw==='accepted'?['done','Approved']:(tr.raw==='rerecord'?['alert','Re-record']:['lock','Received']);
+    var s1=stageEl('1','Vocal Received',rawChip[0],rawChip[1],"Your raw recording is in. Craig approves the recording quality so it can go into production, or flags a re-record.");
     if(tr.raw==='rerecord') s1.insertAdjacentHTML('beforeend','<div class="rerecord-banner">This recording needs to be re-recorded. Please record again and upload it below.</div>');
     else {
-      var rawMsg = tr.raw==='accepted' ? 'Recording is in and accepted for production.'
+      var rawMsg = tr.raw==='accepted' ? 'Recording is in and approved for production.'
                  : (vr()==='client' ? 'Upload your recording here so it can go into production.' : 'Recording is in, awaiting your review.');
       s1.insertAdjacentHTML('beforeend','<div class="stage-body">'+rawMsg+'</div>');
     }
@@ -765,7 +766,14 @@
     s1.appendChild(uploadRow(tr,'raw', vr()==='client' ? (tr.raw==='rerecord'?'Re-record and upload':'Upload your recording') : "Upload raw recording (on client's behalf)"));
     if(vr()==='admin'){
       var ab=document.createElement('div');ab.className='admin-box';
-      ab.innerHTML='<div class="lbl">Admin</div><div class="admin-row">Vocal status: <select data-raw><option value="received">Received</option><option value="accepted">Accepted</option><option value="rerecord">Needs re-record</option></select></div>';
+      ab.innerHTML='<div class="lbl">Admin</div>'
+        +'<div class="admin-row">Vocal status: '
+        +'<select data-raw title="Your quality gate. Received = uploaded, awaiting your check. Approved = quality is good, into production. Needs re-record = not usable, back to the client.">'
+        +'<option value="received" title="Uploaded — awaiting your quality check">Received — awaiting your check</option>'
+        +'<option value="accepted" title="Quality is good — send it into production">Approved — good to produce</option>'
+        +'<option value="rerecord" title="Not usable — send it back to the client to record again">Needs re-record</option>'
+        +'</select></div>'
+        +'<div style="margin-top:8px;font-size:11.5px;color:var(--muted);line-height:1.45">Your quality gate: mark <b>Approved</b> once the recording sounds good to produce. Wording is the client\'s call — they sign off by uploading, and confirm it again at the Final stage.</div>';
       ab.querySelector('[data-raw]').value=tr.raw;
       ab.querySelector('[data-raw]').addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{raw:this.value}).then(reloadKeepOpen); });
       s1.appendChild(ab);
@@ -773,7 +781,7 @@
     expand.appendChild(s1);
 
     // Stages 2–5 (Cover Art now sits before Final Production)
-    expand.appendChild(clientStage(tr,'2','Produced Vocal','cleaned','Listen and approve the produced vocal, or ask for a fix.','Craig produces the vocal here once the recording is accepted.',"Craig's cleaned, produced version of your vocal. Approve it or request a change."));
+    expand.appendChild(clientStage(tr,'2','Produced Vocal','cleaned','Listen and approve the produced vocal, or ask for a fix.','Craig produces the vocal here once the recording is approved.',"Craig's cleaned, produced version of your vocal. Approve it or request a change."));
     expand.appendChild(musicSamplesStage(tr,'3'));
     expand.appendChild(artStage(tr,'4'));
     expand.appendChild(finalStage(tr,'5'));
