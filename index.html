@@ -67,6 +67,13 @@
   .main{margin-left:262px;flex:1;padding:26px 30px 110px;max-width:1000px}
   .intro-band{background:linear-gradient(180deg,#fff 0%,#f9fafd 100%);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px;box-shadow:var(--shadow)}
   .intro-band.has-logo{display:flex;align-items:flex-start;gap:20px}
+  .ib-title{display:flex;align-items:center;gap:14px}
+  .ib-art{width:56px;height:56px;border-radius:11px;object-fit:cover;flex:none;box-shadow:0 2px 8px rgba(20,26,45,.18);background:#fff}
+  .cc-proj-art{width:26px;height:26px;border-radius:6px;object-fit:cover;flex:none;margin-right:8px;background:#fff}
+  .cc-proj-name{display:flex;align-items:center;min-width:0}
+  .art-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:6px 0 10px}
+  .art-thumb{width:56px;height:56px;border-radius:11px;object-fit:cover;border:1px solid var(--line);background:#fff}
+  .art-empty{width:56px;height:56px;border-radius:11px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);text-align:center;line-height:1.2}
   .ib-logo{max-height:84px;max-width:170px;width:auto;object-fit:contain;flex:none;border-radius:6px}
   .ib-text{min-width:0;flex:1}
   .producer-note{margin-top:10px;font-size:13px;line-height:1.5;color:var(--ink);background:#fbf7ec;border-left:3px solid var(--gold);border-radius:8px;padding:10px 13px}
@@ -100,6 +107,8 @@
   .row{display:flex;align-items:center;gap:16px;padding:13px 16px;cursor:pointer}
   .row:hover{background:#fbfbfd}
   .track.complete .row{background:var(--done-bg)}
+  .r-thumb{width:48px;height:48px;border-radius:9px;object-fit:cover;flex:none;background:#f0f1f6;box-shadow:0 1px 5px rgba(20,26,45,.16);margin-right:-4px}
+  .r-thumb-empty{display:flex;align-items:center;justify-content:center;color:#b9bfd0;font-size:19px;box-shadow:none;border:1px dashed var(--line);background:#fafbfd}
   .r-main{flex:1;min-width:0}
   .r-title{font-size:14.5px;font-weight:600;color:var(--ink)}
   .r-status{font-size:12px;margin-top:3px;font-weight:500}
@@ -349,7 +358,7 @@
         <div class="intro-band" id="introBand">
           <img class="ib-logo" id="ibLogo" alt="" style="display:none" />
           <div class="ib-text">
-            <div class="ib-title" id="ibTitle"></div>
+            <div class="ib-title" id="ibTitle"><img class="ib-art" id="ibArt" alt="" style="display:none" /><span id="ibTitleText"></span></div>
             <div class="ib-sub" id="ibSub"></div>
             <div class="ib-intro" id="ibIntro"></div>
             <div class="admin-hint" id="adminHint" style="display:none">Admin mode — upload audio to any stage and toggle when it's ready for the client to review.</div>
@@ -481,7 +490,10 @@
   function applyProjectChrome(){
     document.getElementById('sideClient').textContent=D.client.name;
     document.getElementById('sideProj').textContent=D.project.name;
-    document.getElementById('ibTitle').textContent=D.project.name;
+    document.getElementById('ibTitleText').textContent=D.project.name;
+    var ibArt=document.getElementById('ibArt');   // project artwork: small thumbnail to the left of the title
+    if(D.project.art){ ibArt.src='media/'+encodeURIComponent(D.project.art); ibArt.alt=D.project.name+' artwork'; ibArt.style.display=''; }
+    else{ ibArt.removeAttribute('src'); ibArt.alt=''; ibArt.style.display='none'; }
     document.getElementById('ibSub').textContent=D.project.subtitle || ('Prepared for '+D.client.name+'  ·  produced by '+(D.project.preparedBy||'Craig Young'));
     document.getElementById('ibIntro').textContent=D.project.intro||'';
     var ibLogo=document.getElementById('ibLogo'), band=document.getElementById('introBand');
@@ -728,7 +740,7 @@
         var s=p.stats||{}, bits=[];
         if(s.toReview) bits.push(s.toReview+' to approve'); if(s.readyForFinal) bits.push(s.readyForFinal+' ready for final'); if(s.changes) bits.push(s.changes+' note'+(s.changes===1?'':'s'));
         var b=document.createElement('button');b.type='button';b.className='cc-proj';
-        b.innerHTML='<span>'+esc(p.name)+'</span><span class="cc-mini">'+(bits.length?esc(bits.join(' · ')):(s.total?s.complete+'/'+s.total+' complete':'empty'))+'</span>';
+        b.innerHTML='<span class="cc-proj-name">'+(p.art?'<img class="cc-proj-art" src="media/'+encodeURIComponent(p.art)+'" alt="">':'')+'<span>'+esc(p.name)+'</span></span><span class="cc-mini">'+(bits.length?esc(bits.join(' · ')):(s.total?s.complete+'/'+s.total+' complete':'empty'))+'</span>';
         b.addEventListener('click',function(){ openProject(p.id); });
         pl.appendChild(b);
       });
@@ -806,6 +818,35 @@
   }
 
   // ---- Clients & projects (admin) ----
+  // project artwork: thumbnail + Upload / Replace / Remove (shows beside the project title, and on the home cards)
+  function projectArtRow(projectId, art){
+    var row=document.createElement('div');row.className='art-row';
+    if(art){ var im=document.createElement('img');im.className='art-thumb';im.src='media/'+encodeURIComponent(art);im.alt='Project artwork';row.appendChild(im); }
+    else{ var em=document.createElement('div');em.className='art-empty';em.textContent='No artwork';row.appendChild(em); }
+    var pick=document.createElement('label');pick.className='mini-btn ghost';pick.textContent=art?'Replace artwork':'Upload artwork';
+    var fi=document.createElement('input');fi.type='file';fi.accept='image/png,image/jpeg,image/webp,image/gif';fi.hidden=true;pick.appendChild(fi);
+    fi.addEventListener('change',function(){
+      var f=fi.files&&fi.files[0]; if(!f) return;
+      pick.classList.add('off'); pick.firstChild.textContent='Uploading…';
+      var fd=new FormData();fd.append('file',f);fd.append('projectId',projectId);
+      fetch('/api/project-art',{method:'POST',body:fd}).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw j; return j; }); })
+        .then(function(){ toast('Artwork saved','ok'); return reloadKeepOpen(); })
+        .catch(function(e){ pick.classList.remove('off'); pick.firstChild.textContent=art?'Replace artwork':'Upload artwork'; fi.value=''; toast(errMsg(e,'Artwork upload failed'),'err'); });
+    });
+    row.appendChild(pick);
+    if(art){
+      var rm=document.createElement('button');rm.type='button';rm.className='mini-btn ghost danger';rm.textContent='Remove';
+      rm.addEventListener('click',function(){
+        uiConfirm('Remove this project\'s artwork?',{title:'Remove artwork',okLabel:'Remove',danger:true}).then(function(ok){
+          if(!ok) return;
+          api('POST','/api/project-art-delete',{projectId:projectId}).then(reloadKeepOpen).catch(function(){ toast('Remove failed','err'); });
+        });
+      });
+      row.appendChild(rm);
+    }
+    var hint=document.createElement('span');hint.className='uling';hint.textContent='Shows as a small thumbnail beside the project title. Square works best. PNG, JPG, WebP or GIF, up to 10 MB.';row.appendChild(hint);
+    return row;
+  }
   // per-client name + logo (logo shows in the header band the client sees)
   function clientBrandRow(c){
     var row=document.createElement('div');row.className='logo-row';
@@ -911,6 +952,7 @@
           +'<textarea data-f="intro" placeholder="Client intro" style="font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;min-height:70px;resize:vertical">'+esc(p.intro||'')+'</textarea>'
           +'<div><button class="mini-btn" data-save>Save project</button> <button class="mini-btn ghost" data-close>Cancel</button></div></div>';
         box.style.display='block';
+        box.querySelector('.acct-form').insertBefore(projectArtRow(id,p.art),box.querySelector('[data-f="name"]'));
         function f(k){ return box.querySelector('[data-f="'+k+'"]').value; }
         box.querySelector('[data-close]').addEventListener('click',function(){ box.style.display='none'; });
         box.querySelector('[data-save]').addEventListener('click',function(){
@@ -952,6 +994,9 @@
       +'<div><button class="mini-btn" id="stSave">Save settings</button></div>'
       +'</div><div class="acct-msg" id="stMsg"></div>';
     host.appendChild(w);
+    var stForm=w.querySelector('.acct-form'), stLbl=document.createElement('div');
+    stLbl.className='lbl';stLbl.style.cssText='font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700';stLbl.textContent='Project artwork';
+    stForm.insertBefore(projectArtRow(D.project.id,D.project.art),stForm.firstChild);stForm.insertBefore(stLbl,stForm.firstChild);
     document.getElementById('stSave').addEventListener('click',function(){
       var msg=document.getElementById('stMsg');
       var nameVal=document.getElementById('stName').value.trim(), introVal=document.getElementById('stIntro').value, prepVal=document.getElementById('stPrep').value.trim();
@@ -1166,7 +1211,10 @@
                : (hasRaw && tr.raw!=='none') ? "Your recording is in, awaiting Craig's quality check."
                :                     "Waiting on your recording to begin production.";
     var row=document.createElement('div');row.className='row';
-    row.innerHTML='<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+'</div></div>'
+    // cover thumbnail to the left of the title, like a music list. The client only sees it once the cover is ready for them; otherwise a quiet placeholder keeps titles aligned.
+    var showCover = !!(tr.cover && (vr()==='admin' || tr.art));
+    var thumb = showCover ? '<img class="r-thumb" src="media/'+encodeURIComponent(tr.cover)+'" alt="" loading="lazy" decoding="async">' : '<div class="r-thumb r-thumb-empty" aria-hidden="true">&#9834;</div>';
+    row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+'</div></div>'
       +'<div class="tracker">'
         +stepHtml(st.raw,'Vocal',1,rawTip)
         +stepHtml(st.cleaned,'Produced',2,"Craig's cleaned, produced version of your vocal. Approve it or request a change.")

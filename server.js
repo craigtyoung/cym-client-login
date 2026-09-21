@@ -106,7 +106,7 @@ function removeTrackFiles(tr){
   (tr.samples||[]).forEach(function(f){ names.push(f); }); names.push(tr.cover);
   names.forEach(removeStoreFile);
 }
-function removeProjectFiles(project){ eachTrack(project, removeTrackFiles); }
+function removeProjectFiles(project){ eachTrack(project, removeTrackFiles); removeStoreFile(project.art); }
 
 // ---------- multi-tenant lookups ----------
 function allProjects(){
@@ -292,14 +292,14 @@ app.get('/api/data', requireAuth, function(req,res){
   const proj=ctx.project, client=ctx.client;
   const out={ role:req.role, brand:DATA.brand,
     client:{ id:client.id, name:client.name, logo:client.logo||'' },
-    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', metaDefaults:proj.metaDefaults||{}, payUrl:proj.payUrl||'', payLabel:proj.payLabel||'' },
+    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', art:proj.art||'', metaDefaults:proj.metaDefaults||{}, payUrl:proj.payUrl||'', payLabel:proj.payLabel||'' },
     contact: client.contact || {method:'WhatsApp'},
     categories: proj.categories, approvals: proj.approvals };
   if(req.role==='admin'){
     out.activeProjectId=proj.id;
     out.clients=DATA.clients.map(function(c){
       return { id:c.id, name:c.name, logo:c.logo||'', contact:c.contact||{},
-        projects:c.projects.map(function(p){ return { id:p.id, name:p.name, intro:p.intro, preparedBy:p.preparedBy||'', subtitle:p.subtitle||'', hasCode:!!(p.auth&&p.auth.clientHash), pieces:countPieces(p), stats:projectStats(p) }; }) };
+        projects:c.projects.map(function(p){ return { id:p.id, name:p.name, intro:p.intro, preparedBy:p.preparedBy||'', subtitle:p.subtitle||'', art:p.art||'', hasCode:!!(p.auth&&p.auth.clientHash), pieces:countPieces(p), stats:projectStats(p) }; }) };
     });
   }
   res.json(out);
@@ -449,6 +449,26 @@ app.post('/api/client-logo', requireAdmin, function(req,res,next){ upload.single
   catch(e){ cleanup(); return res.status(500).json({error:'save failed'}); }
   if(prev && prev!==finalName) removeStoreFile(prev);
   c.logo=finalName; saveData(DATA); res.json({ok:true, logo:finalName});
+});
+// project artwork (the series / album cover shown as a small thumbnail beside the project title). Same image rules as logos, up to 10 MB.
+app.post('/api/project-art', requireAdmin, function(req,res,next){ upload.single('file')(req,res,function(err){ if(err) return res.status(400).json({error: err.code==='LIMIT_FILE_SIZE'?'File too large':'Upload failed'}); next(); }); }, function(req,res){
+  const cleanup=function(){ if(req.file){ try{ fs.unlinkSync(req.file.path); }catch(e){} } };
+  const found=findProject((req.body||{}).projectId);
+  if(!found){ cleanup(); return res.status(404).json({error:'no project'}); }
+  if(!req.file) return res.status(400).json({error:'no file'});
+  const ext=path.extname(req.file.originalname||'').toLowerCase();
+  if(LOGO_EXT.indexOf(ext)<0 || !/^image\//.test(req.file.mimetype||'')){ cleanup(); return res.status(400).json({error:'Artwork must be a PNG, JPG, WebP or GIF image'}); }
+  if(req.file.size>10*1024*1024){ cleanup(); return res.status(400).json({error:'Artwork must be under 10 MB'}); }
+  const proj=found.project, finalName='project-'+proj.id+'-art'+ext, dest=path.join(AUDIO_DIR, finalName), prev=proj.art;
+  try{ if(fs.existsSync(dest)) fs.unlinkSync(dest); fs.renameSync(req.file.path, dest); }
+  catch(e){ cleanup(); return res.status(500).json({error:'save failed'}); }
+  if(prev && prev!==finalName) removeStoreFile(prev);
+  proj.art=finalName; saveData(DATA); res.json({ok:true, art:finalName});
+});
+app.post('/api/project-art-delete', requireAdmin, function(req,res){
+  const found=findProject((req.body||{}).projectId);
+  if(!found) return res.status(404).json({error:'no project'});
+  removeStoreFile(found.project.art); found.project.art=''; saveData(DATA); res.json({ok:true});
 });
 app.post('/api/client-logo-delete', requireAdmin, function(req,res){
   const c=(DATA.clients||[]).find(function(x){ return x.id===(req.body||{}).clientId; });
