@@ -1,5 +1,5 @@
 /* Craig Young Music — Client Preview & Approvals  (v3 backend)
-   Multi-tenant: Client → Project → Collection → Piece.
+   Multi-tenant: Client → Project → Recording (with optional group headings inside a project).
    One admin (Craig) across all clients; each project has its own client access code,
    catalogue and approvals. Data + audio live under DATA_DIR (a Railway Volume in prod). */
 
@@ -42,6 +42,13 @@ function listAt(project, catIndex, subIndex){
   var cat = project.categories[catIndex]; if(!cat) return null;
   if(cat.subcategories){ var sub = cat.subcategories[subIndex]; return sub ? sub.tracks : null; }
   return cat.tracks || null;
+}
+// Structure is Client → Project → Recording. "Groups" (categories) are optional headings inside a project; recordings that
+// belong to no group live in one hidden, heading-less category flagged `implicit`.
+function implicitCategory(project){
+  var c=(project.categories||[]).filter(function(x){ return x.implicit; })[0];
+  if(!c){ c={ name:'Recordings', subtitle:'', implicit:true, tracks:[] }; (project.categories=project.categories||[]).push(c); }
+  return c;
 }
 function removeTrackById(project, id){
   var removed = null;
@@ -356,12 +363,16 @@ app.post('/api/track/:id', requireAdmin, function(req,res){
 });
 app.post('/api/track-add', requireAdmin, function(req,res){
   const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
-  const proj=ctx.project, {catIndex, subIndex, title, raw} = req.body||{};
-  if(!title || !String(title).trim()) return res.status(400).json({error:'title required'});
-  const list = listAt(proj, catIndex, subIndex);
+  const proj=ctx.project, {catIndex, subIndex, title, titles, raw} = req.body||{};
+  // one title, or several at once (titles: [...]) — blank lines dropped, max 50 per request
+  const names=(Array.isArray(titles)?titles:[title]).map(function(t){ return String(t==null?'':t).trim().slice(0,200); }).filter(Boolean).slice(0,50);
+  if(!names.length) return res.status(400).json({error:'title required'});
+  // no group given = the project's plain recording list (created on first use); a group index puts it under that heading
+  const hasGroup = catIndex!=null && catIndex!=='' && catIndex!=='none';
+  const list = hasGroup ? listAt(proj, catIndex, subIndex) : implicitCategory(proj).tracks;
   if(!list) return res.status(400).json({error:'bad location'});
-  const tr = newTrack(proj, String(title).trim(), raw);
-  list.push(tr); saveData(DATA); res.json({ok:true, track:tr});
+  const made=names.map(function(n){ var tr=newTrack(proj, n, raw); list.push(tr); return tr; });
+  saveData(DATA); res.json({ok:true, track:made[0], tracks:made});
 });
 app.post('/api/track-delete', requireAdmin, function(req,res){
   const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
@@ -379,6 +390,17 @@ app.post('/api/category-add', requireAdmin, function(req,res){
   const cat = { name: String(name).trim(), subtitle: String(subtitle||'').slice(0,140) };
   if(kind === 'parent') cat.subcategories = []; else cat.tracks = [];
   proj.categories.push(cat); saveData(DATA); res.json({ok:true});
+});
+// remove a plain group heading but KEEP its recordings (they move to the project's ungrouped list)
+app.post('/api/category-ungroup', requireAdmin, function(req,res){
+  const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
+  const proj=ctx.project, cat=proj.categories[parseInt((req.body||{}).catIndex,10)];
+  if(!cat) return res.status(404).json({error:'no group'});
+  if(cat.implicit || cat.subcategories) return res.status(400).json({error:'Only a plain group can be removed this way'});
+  const moved=(cat.tracks||[]).length;
+  if(moved){ const imp=implicitCategory(proj); imp.tracks=imp.tracks.concat(cat.tracks); }
+  proj.categories=proj.categories.filter(function(c){ return c!==cat; });
+  saveData(DATA); res.json({ok:true, moved:moved});
 });
 app.post('/api/subcategory-add', requireAdmin, function(req,res){
   const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});

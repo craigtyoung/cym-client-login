@@ -232,6 +232,10 @@
   .add-form{margin:8px 4px 4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:#fffdf9;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
   .add-form input,.add-form select{font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px}
   .add-form input.title{min-width:200px}
+  .add-form textarea.title{width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;resize:vertical}
+  .top-add{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+  .top-add .admin-add{margin:10px 4px 4px}
+  .start-guide ol{margin:6px 0 12px 20px;font-size:13.5px;line-height:1.65;color:var(--ink)}
   .cat-add-btn{font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer;color:var(--gold);background:none;border:none;text-decoration:underline;margin-left:10px}
   .details-box{margin-top:10px;padding:12px;border:1px dashed var(--gold);border-radius:10px;background:#fffdf9}
   .details-box .lbl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:8px}
@@ -553,19 +557,37 @@
       addNav('Production queue','__queue__',false);
       addNav('Approvals & notes','__approvals__',false);
       addNav('Deliverables','__deliverables__',false);
-      addNavLabel('Catalogue');
+      addNavLabel('Recordings');
       addNav('Overview','__all__',false);
     }else{
-      addNavLabel('Collections');
+      addNavLabel('Recordings');
       addNav('Overview','__all__',false);
     }
     if(special) special();
+    var hasContent = D.categories.some(function(c){ return !c.implicit || catTracks(c).length; });   // any group, or any recording
+    if(!special && !hasContent){
+      if(isAdmin) host.appendChild(startGuide());
+      else host.insertAdjacentHTML('beforeend','<div class="dash-sec"><div class="sec-note" style="margin:0">Your recordings will appear here as soon as they are ready.</div></div>');
+    } else if(!special && isAdmin){
+      host.appendChild(topAddBar());   // top of the page, where you look for it
+    }
     D.categories.forEach(function(cat, ci){
       var sec=document.createElement('section');sec.className='category';
       if(special) sec.style.display='none';
       else if(FILTER!=='__all__' && FILTER.split('::')[0]!==cat.name) sec.style.display='none';
       var head=document.createElement('div');head.className='cat-head';
-      head.innerHTML='<div class="cat-name">'+esc(cat.name)+'</div>'+(cat.subtitle?'<div class="cat-sub">'+esc(cat.subtitle)+'</div>':'')+'<div class="cat-count">'+catTracks(cat).length+' pieces</div>';
+      head.innerHTML='<div class="cat-name">'+esc(cat.name)+'</div>'+(cat.subtitle?'<div class="cat-sub">'+esc(cat.subtitle)+'</div>':'')+'<div class="cat-count">'+catTracks(cat).length+' recordings</div>';
+      if(vr()==='admin' && !cat.subcategories && !cat.implicit){
+        var ug=document.createElement('button');ug.className='cat-add-btn';ug.textContent='remove group';
+        ug.title='Removes this heading. The recordings stay in the project.';
+        ug.addEventListener('click',function(){
+          uiConfirm('This removes the "'+cat.name+'" heading. Its '+catTracks(cat).length+' recording(s) stay in the project, just without a heading.',{title:'Remove group',okLabel:'Remove group'}).then(function(ok){
+            if(!ok) return;
+            api('POST','/api/category-ungroup',{catIndex:ci}).then(function(){ FILTER='__all__'; toast('Group removed','ok'); return reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Could not remove the group'),'err'); });
+          });
+        });
+        head.querySelector('.cat-count').appendChild(ug);
+      }
       if(vr()==='admin' && cat.subcategories){
         var asb=document.createElement('button');asb.className='cat-add-btn';asb.textContent='+ sacred text';
         asb.addEventListener('click',function(){
@@ -581,23 +603,25 @@
         });
         head.querySelector('.cat-count').appendChild(asb);
       }
-      sec.appendChild(head);
+      if(!cat.implicit) sec.appendChild(head);   // ungrouped recordings have no heading
       if(cat.subcategories){
         cat.subcategories.forEach(function(sub, si){
           var showSub = FILTER==='__all__' || FILTER===cat.name || FILTER===cat.name+'::'+sub.name;
           var block=document.createElement('div'); if(!showSub) block.style.display='none';
-          var lbl=document.createElement('div');lbl.className='subcat';lbl.textContent=sub.name+'  ·  '+sub.tracks.length+' pieces';
+          var lbl=document.createElement('div');lbl.className='subcat';lbl.textContent=sub.name+'  ·  '+sub.tracks.length+' recordings';
           block.appendChild(lbl);block.appendChild(listEl(sub.tracks));
           if(vr()==='admin') block.appendChild(addTrackControl(ci, si));
           sec.appendChild(block);
         });
       }else{
         sec.appendChild(listEl(cat.tracks));
-        if(vr()==='admin') sec.appendChild(addTrackControl(ci, null));
+        if(vr()==='admin' && !cat.implicit) sec.appendChild(addTrackControl(ci, null));   // ungrouped: the top button covers it
       }
       host.appendChild(sec);
-      addNav(cat.name,cat.name,false,catTracks(cat).length);
-      if(cat.subcategories) cat.subcategories.forEach(function(sub){ addNav(sub.name,cat.name+'::'+sub.name,true,sub.tracks.length); });
+      if(!cat.implicit){
+        addNav(cat.name,cat.name,false,catTracks(cat).length);
+        if(cat.subcategories) cat.subcategories.forEach(function(sub){ addNav(sub.name,cat.name+'::'+sub.name,true,sub.tracks.length); });
+      }
     });
     if(isAdmin){
       addNavLabel('Manage');
@@ -608,7 +632,22 @@
       addNavLabel('Account');
       addNav('Account & security','__account__',false);
     }
-    if(!special && isAdmin) host.appendChild(addCollectionControl());
+  }
+  // empty project: one step. The recording form is already open.
+  function startGuide(){
+    var w=document.createElement('div');w.className='dash-sec start-guide';
+    w.innerHTML='<h3>Start here: add your recordings</h3><div class="sec-note">This project has no recordings yet.</div>'
+      +'<ol><li><b>Add the recordings.</b> Type a title, or paste several, one per line, to add them all at once.</li>'
+      +'<li><b>Open each recording</b> to upload its files and choose when it is ready for the client.</li></ol>';
+    w.appendChild(addTrackControl(null,null,{top:true,openNow:true}));
+    return w;
+  }
+  // top of a project: add recordings (the main action) + an optional group heading
+  function topAddBar(){
+    var bar=document.createElement('div');bar.className='top-add';
+    bar.appendChild(addTrackControl(null,null,{top:true}));
+    var g=addGroupControl();g.classList.add('top-add-group');bar.appendChild(g);
+    return bar;
   }
 
   function addNavLabel(text){ var d=document.createElement('div');d.className='nav-sec-label';d.textContent=text;nav.appendChild(d); }
@@ -620,7 +659,7 @@
       .then(function(){ window.scrollTo({top:0,behavior:'smooth'}); }).catch(function(e){ toast(errMsg(e,'Could not open that project'),'err'); });
   }
   function newProjectFor(c){
-    return uiPrompt('Name the new project for '+c.name+'. Each project is its own portal with its own access code, pieces and approvals.',{title:'New project',okLabel:'Create project',placeholder:'e.g. The Spiritual Sanctuary',
+    return uiPrompt('Name the new project for '+c.name+'. Each project is its own portal with its own access code, recordings and approvals.',{title:'New project',okLabel:'Create project',placeholder:'e.g. The Spiritual Sanctuary',
       validate:function(v){ return v?'':'Enter a project name.'; }}).then(function(name){
       if(name==null) return;
       return api('POST','/api/project-add',{clientId:c.id,name:name}).then(function(){ FILTER='__all__'; return reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Could not create the project'),'err'); });
@@ -653,7 +692,7 @@
     clients.forEach(function(c){ c.projects.forEach(function(p){ var s=p.stats||{}; totals.projects++; totals.pieces+=(p.pieces||0); totals.needYou+=(s.toReview||0)+(s.changes||0); }); });
     var head=document.createElement('div');head.className='home-head';
     head.innerHTML='<div><div class="home-title">Your clients</div><div class="home-sub">'
-      +(clients.length?(totals.clients+' client'+(totals.clients===1?'':'s')+' · '+totals.projects+' project'+(totals.projects===1?'':'s')+' · '+totals.pieces+' pieces'+(totals.needYou?' · <b style="color:var(--await)">'+totals.needYou+' need you</b>':'')):'No clients yet')
+      +(clients.length?(totals.clients+' client'+(totals.clients===1?'':'s')+' · '+totals.projects+' project'+(totals.projects===1?'':'s')+' · '+totals.pieces+' recordings'+(totals.needYou?' · <b style="color:var(--await)">'+totals.needYou+' need you</b>':'')):'No clients yet')
       +'</div></div><button class="mini-btn" id="hmAdd">+ Add client</button>';
     wrap.appendChild(head);
     var form=document.createElement('div');form.className='dash-sec home-add';form.style.display='none';
@@ -671,7 +710,7 @@
       if(c.logo){ var im=document.createElement('img');im.src='media/'+encodeURIComponent(c.logo);im.alt='';av.appendChild(im); } else av.textContent=(c.name||'?').trim().charAt(0).toUpperCase();
       var top=document.createElement('div');top.className='cc-top';top.appendChild(av);
       var tt=document.createElement('div');
-      tt.innerHTML='<div class="cc-name">'+esc(c.name)+'</div><div class="cc-meta">'+c.projects.length+' project'+(c.projects.length===1?'':'s')+' · '+agg.total+' pieces</div>';
+      tt.innerHTML='<div class="cc-name">'+esc(c.name)+'</div><div class="cc-meta">'+c.projects.length+' project'+(c.projects.length===1?'':'s')+' · '+agg.total+' recordings</div>';
       top.appendChild(tt);card.appendChild(top);
       var pl=document.createElement('div');pl.className='cc-projects';
       if(!c.projects.length){ pl.innerHTML='<div class="cc-empty">No projects yet.</div>'; }
@@ -723,8 +762,8 @@
   var SPECIAL = {
     '__home__': renderHome,
     '__dash__': renderDashboard,
-    '__queue__': function(){ placeholder('Production queue','A pipeline view across every piece — what’s in raw, cleaning, music, final and artwork, and what’s next in line to produce.'); },
-    '__approvals__': function(){ placeholder('Approvals & notes','Every client approval and change request in one running list, filterable by piece and stage.'); },
+    '__queue__': function(){ placeholder('Production queue','A pipeline view across every recording — what’s in raw, cleaning, music, final and artwork, and what’s next in line to produce.'); },
+    '__approvals__': function(){ placeholder('Approvals & notes','Every client approval and change request in one running list, filterable by recording and stage.'); },
     '__deliverables__': function(){ placeholder('Deliverables','Final approved audio + covers, ready to hand off — download or export per collection.'); },
     '__clients__': renderClients,
     '__billing__': function(){ placeholder('Billing','Per-recording rates and founding rates, what’s been invoiced, and what’s paid.'); },
@@ -778,7 +817,7 @@
     var dc=document.createElement('button');dc.type='button';dc.className='mini-btn ghost danger';dc.textContent='Delete client';
     dc.addEventListener('click',function(){
       var n=(c.projects||[]).length, pieces=(c.projects||[]).reduce(function(a,p){ return a+(p.pieces||0); },0);
-      uiTypeToConfirm('This permanently deletes the client "'+c.name+'": '+n+' project(s), '+pieces+' piece(s), their approvals, logo and every uploaded file. It cannot be undone.',c.name,{title:'Delete client',okLabel:'Delete client'}).then(function(ok){
+      uiTypeToConfirm('This permanently deletes the client "'+c.name+'": '+n+' project(s), '+pieces+' recording(s), their approvals, logo and every uploaded file. It cannot be undone.',c.name,{title:'Delete client',okLabel:'Delete client'}).then(function(ok){
         if(!ok) return;
         api('POST','/api/client-delete',{clientId:c.id}).then(function(){ FILTER='__clients__'; toast('Client deleted','ok'); return reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Delete failed'),'err'); });
       });
@@ -809,7 +848,7 @@
         c.projects.forEach(function(p){
           var active=p.id===D.activeProjectId;
           h+='<div class="dash-item"><div class="di-body"><div class="di-title">'+esc(p.name)+(active?' <span class="di-tag note">active</span>':'')+'</div>'
-            +'<div class="di-sub">'+p.pieces+' pieces · '+(p.hasCode?'client code set':'no client code yet')+'</div></div>'
+            +'<div class="di-sub">'+p.pieces+' recordings · '+(p.hasCode?'client code set':'no client code yet')+'</div></div>'
             +'<button class="mini-btn ghost" data-open="'+esc(p.id)+'"'+(active?' disabled':'')+'>Open</button>'
             +'<button class="mini-btn ghost" data-code="'+esc(p.id)+'">Set code</button>'
             +'<button class="mini-btn ghost" data-edit="'+esc(p.id)+'">Edit</button>'
@@ -873,7 +912,7 @@
     wrap.querySelectorAll('[data-del]').forEach(function(btn){
       btn.addEventListener('click',function(){
         var id=btn.getAttribute('data-del'), p=PROJ[id];
-        uiTypeToConfirm('This permanently deletes the project "'+p.name+'": '+p.pieces+' piece(s), their approvals and every uploaded file. It cannot be undone.',p.name,{title:'Delete project',okLabel:'Delete project'}).then(function(ok){
+        uiTypeToConfirm('This permanently deletes the project "'+p.name+'": '+p.pieces+' recording(s), their approvals and every uploaded file. It cannot be undone.',p.name,{title:'Delete project',okLabel:'Delete project'}).then(function(ok){
           if(!ok) return;
           api('POST','/api/project-delete',{projectId:id}).then(function(){ FILTER='__clients__'; toast('Project deleted','ok'); return reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Delete failed'),'err'); });
         });
@@ -925,7 +964,7 @@
         var n=a[p[0]+'Note']; if(n) attention.push({tag:'Change',cls:'note',title:tr.title,sub:'['+p[1]+']  '+n});
       });
     });
-    var cards=[['Pieces',total,''],['Awaiting you',rawToAccept,'attn'],['Awaiting client',awaitingClient,''],['Final approved',finalApproved,''],['Covers approved',coversApproved,'']];
+    var cards=[['Recordings',total,''],['Awaiting you',rawToAccept,'attn'],['Awaiting client',awaitingClient,''],['Final approved',finalApproved,''],['Covers approved',coversApproved,'']];
     var ch='<div class="dash-cards">';
     cards.forEach(function(c){ ch+='<div class="dash-card '+c[2]+'"><div class="dc-num">'+c[1]+'</div><div class="dc-lbl">'+c[0]+'</div></div>'; });
     ch+='</div>';
@@ -938,22 +977,49 @@
   }
 
   // ---- admin content-editor controls ----
-  function addTrackControl(ci, si){
+  // groups (optional headings) a recording can go under, as <option>s: value "ci:si" (si blank for a plain group), or "none"
+  function groupOptionsHtml(){
+    var h='';
+    D.categories.forEach(function(cat,ci){
+      if(cat.implicit) return;
+      if(cat.subcategories) cat.subcategories.forEach(function(sub,si){ h+='<option value="'+ci+':'+si+'">'+esc(cat.name+' › '+sub.name)+'</option>'; });
+      else h+='<option value="'+ci+':">'+esc(cat.name)+'</option>';
+    });
+    return h ? h+'<option value="none">No group</option>' : '';
+  }
+  // opts.top: the main "+ Add recording" at the top of a project (offers a group choice when the project has groups)
+  function addTrackControl(ci, si, opts){
+    opts=opts||{};
     var wrap=document.createElement('div');wrap.className='admin-add';
-    var btn=document.createElement('button');btn.className='add-btn';btn.textContent='+ Add piece';
+    var btn=document.createElement('button');btn.className='add-btn';btn.textContent='+ Add recording';
     wrap.appendChild(btn);
     btn.addEventListener('click',function(){
       if(wrap.querySelector('.add-form')) return;
       var form=document.createElement('div');form.className='add-form';
-      form.innerHTML='<input class="title" placeholder="Piece title" />'
+      var groupOpts=opts.top?groupOptionsHtml():'';
+      form.innerHTML='<div style="flex:1 1 320px"><textarea class="title" rows="3" placeholder="Recording title, or paste several (one per line)"></textarea>'
+        +'<div class="uling" style="margin-top:4px">Each title on its own line becomes its own recording.</div></div>'
+        +(groupOpts?'<label class="uling" style="display:flex;flex-direction:column;gap:4px">Group<select class="grp">'+groupOpts+'</select></label>':'')
         +'<button class="mini-btn" data-save>Add</button><button class="mini-btn ghost" data-cancel>Cancel</button>';
       wrap.appendChild(form);
       var ti=form.querySelector('.title'); ti.focus();
       form.querySelector('[data-cancel]').addEventListener('click',function(){ form.remove(); });
-      function submit(){ var t=ti.value.trim(); if(!t){ti.focus();return;} api('POST','/api/track-add',{catIndex:ci,subIndex:si,title:t}).then(reloadKeepOpen); }
+      function submit(){
+        var names=ti.value.split(/\r?\n/).map(function(s){ return s.trim(); }).filter(Boolean);
+        if(!names.length){ ti.focus(); return; }
+        var b=form.querySelector('[data-save]'); b.disabled=true;
+        var target={catIndex:ci,subIndex:si}, sel=form.querySelector('select.grp');
+        if(opts.top){
+          if(sel && sel.value!=='none'){ var pr=sel.value.split(':'); target={catIndex:parseInt(pr[0],10),subIndex:pr[1]===''?null:parseInt(pr[1],10)}; }
+          else target={};   // no group: goes to the project's plain list
+        }
+        api('POST','/api/track-add',Object.assign({titles:names},target)).then(function(){ toast(names.length===1?'Recording added':names.length+' recordings added','ok'); return reloadKeepOpen(); })
+          .catch(function(e){ b.disabled=false; toast(errMsg(e,'Could not add'),'err'); });
+      }
       form.querySelector('[data-save]').addEventListener('click',submit);
-      ti.addEventListener('keydown',function(e){ if(e.key==='Enter') submit(); });
+      ti.addEventListener('keydown',function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); submit(); } });   // Enter adds; Shift+Enter = new line
     });
+    if(opts.openNow) btn.click();
     return wrap;
   }
   // Shared upload control for every stage. Pick a file and it uploads straight away.
@@ -1018,21 +1084,22 @@
   }
   var REPLACE_WARN='The client has already approved this. Replacing it clears their approval so they review the new file.';
   var REMOVE_WARN='This also clears any client approval and takes the stage back to not ready.';
-  function addCollectionControl(){
+  // optional heading that keeps a long list of recordings organised (most projects don't need one)
+  function addGroupControl(){
     var wrap=document.createElement('div');wrap.className='admin-add';
-    var btn=document.createElement('button');btn.className='add-btn';btn.textContent='+ Add collection';
+    var btn=document.createElement('button');btn.className='cat-add-btn';btn.style.marginLeft='0';btn.textContent='+ Add group (optional)';
     wrap.appendChild(btn);
     btn.addEventListener('click',function(){
       if(wrap.querySelector('.add-form')) return;
       var form=document.createElement('div');form.className='add-form';
-      form.innerHTML='<input class="title" placeholder="Collection name" />'
-        +'<input class="sub" placeholder="Subtitle (optional)" style="max-width:180px" />'
-        +'<select class="kind"><option value="leaf">Holds pieces directly</option><option value="parent">Holds sacred texts (sub-collections)</option></select>'
-        +'<button class="mini-btn" data-save>Add</button><button class="mini-btn ghost" data-cancel>Cancel</button>';
+      form.innerHTML='<input class="title" placeholder="Group heading, e.g. Bhagavad Gita" />'
+        +'<input class="sub" placeholder="Subtitle (optional)" style="max-width:200px" />'
+        +'<button class="mini-btn" data-save>Add group</button><button class="mini-btn ghost" data-cancel>Cancel</button>'
+        +'<div class="uling" style="flex-basis:100%">A group is just a heading that keeps a long list of recordings organised. Most projects do not need one. You choose the group when you add recordings.</div>';
       wrap.appendChild(form);
       var ni=form.querySelector('.title'); ni.focus();
       form.querySelector('[data-cancel]').addEventListener('click',function(){ form.remove(); });
-      function submit(){ var n=ni.value.trim(); if(!n){ni.focus();return;} api('POST','/api/category-add',{name:n,subtitle:form.querySelector('.sub').value.trim(),kind:form.querySelector('.kind').value}).then(reloadKeepOpen); }
+      function submit(){ var n=ni.value.trim(); if(!n){ni.focus();return;} api('POST','/api/category-add',{name:n,subtitle:form.querySelector('.sub').value.trim(),kind:'leaf'}).then(function(){ toast('Group added. Choose it when you add recordings.','ok'); return reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Could not add the group'),'err'); }); }
       form.querySelector('[data-save]').addEventListener('click',submit);
       ni.addEventListener('keydown',function(e){ if(e.key==='Enter') submit(); });
     });
@@ -1040,11 +1107,11 @@
   }
   function detailsEditor(tr){
     var box=document.createElement('div');box.className='details-box';
-    box.innerHTML='<div class="lbl">Project details</div>'
+    box.innerHTML='<div class="lbl">Recording details</div>'
       +'<div class="details-grid">'
-      +'<input class="title" placeholder="Project name / title" value="'+esc(tr.title)+'" />'
+      +'<input class="title" placeholder="Recording title" value="'+esc(tr.title)+'" />'
       +'<button class="mini-btn" data-save>Save</button>'
-      +'<button class="danger-btn" data-del>Remove piece</button>'
+      +'<button class="danger-btn" data-del>Remove recording</button>'
       +'</div>'
       +'<textarea data-desc placeholder="Description (shown to the client)" style="margin-top:8px;width:100%;font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;min-height:56px;resize:vertical">'+esc(tr.description||'')+'</textarea>'
       +'<input data-note placeholder="Internal note (private — client never sees this)" style="margin-top:8px;width:100%;font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px" value="'+esc(tr.note||'')+'" />';
@@ -1052,7 +1119,7 @@
       api('POST','/api/track/'+tr.id,{ title:box.querySelector('.title').value.trim()||tr.title, description:box.querySelector('[data-desc]').value.trim(), note:box.querySelector('[data-note]').value.trim() }).then(reloadKeepOpen);
     });
     box.querySelector('[data-del]').addEventListener('click',function(){
-      uiConfirm('This deletes "'+tr.title+'" and any audio uploaded for it. It cannot be undone.',{title:'Remove piece',okLabel:'Remove piece',danger:true}).then(function(ok){
+      uiConfirm('This deletes "'+tr.title+'" and any audio uploaded for it. It cannot be undone.',{title:'Remove recording',okLabel:'Remove recording',danger:true}).then(function(ok){
         if(ok) api('POST','/api/track-delete',{id:tr.id}).then(function(){ openIds[tr.id]=0; reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Remove failed'),'err'); });
       });
     });
@@ -1112,7 +1179,7 @@
     // client-visible description
     if(tr.description){
       var dsc=document.createElement('div');dsc.className='piece-desc';
-      dsc.innerHTML='<div class="pd-lbl">About this piece</div>'+esc(tr.description);
+      dsc.innerHTML='<div class="pd-lbl">About this recording</div>'+esc(tr.description);
       expand.appendChild(dsc);
     }
 

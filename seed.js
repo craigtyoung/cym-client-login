@@ -23,7 +23,7 @@ module.exports = {
     name: "Boris Walter",
     project: "The Spiritual Sanctuary",
     preparedBy: "Craig Young",
-    intro: "Here is your catalogue, tracked through every stage of production. You will approve the cleaned vocal, preview the music, and give the final sign-off on each piece. Anything you would like changed, add a note and I will take care of it."
+    intro: "Here is your catalogue, tracked through every stage of production. You will approve the cleaned vocal, preview the music, and give the final sign-off on each recording. Anything you would like changed, add a note and I will take care of it."
   },
   contact: { method: "WhatsApp" },
   categories: [
