@@ -74,6 +74,12 @@ function resetStageApprovals(project, trackId, stage, sampleIndex){
   else if(stage==='music' && a.musicSelected===sampleIndex){ a.musicSelected=-1; a.musicSeen=false; }
 }
 function removeStoreFile(name){ if(name){ try{ fs.unlinkSync(path.join(AUDIO_DIR, path.basename(name))); }catch(e){} } }
+function removeTrackFiles(tr){
+  var names=[]; if(tr.audio) ['raw','cleaned','music','final'].forEach(function(k){ names.push(tr.audio[k]); });
+  (tr.samples||[]).forEach(function(f){ names.push(f); }); names.push(tr.cover);
+  names.forEach(removeStoreFile);
+}
+function removeProjectFiles(project){ eachTrack(project, removeTrackFiles); }
 
 // ---------- multi-tenant lookups ----------
 function allProjects(){
@@ -258,15 +264,15 @@ app.get('/api/data', requireAuth, function(req,res){
   const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
   const proj=ctx.project, client=ctx.client;
   const out={ role:req.role, brand:DATA.brand,
-    client:{ name:client.name },
-    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, payUrl:proj.payUrl||'', payLabel:proj.payLabel||'' },
+    client:{ name:client.name, logo:client.logo||'' },
+    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', payUrl:proj.payUrl||'', payLabel:proj.payLabel||'' },
     contact: client.contact || {method:'WhatsApp'},
     categories: proj.categories, approvals: proj.approvals };
   if(req.role==='admin'){
     out.activeProjectId=proj.id;
     out.clients=DATA.clients.map(function(c){
-      return { id:c.id, name:c.name, contact:c.contact||{},
-        projects:c.projects.map(function(p){ return { id:p.id, name:p.name, intro:p.intro, hasCode:!!(p.auth&&p.auth.clientHash), pieces:countPieces(p) }; }) };
+      return { id:c.id, name:c.name, logo:c.logo||'', contact:c.contact||{},
+        projects:c.projects.map(function(p){ return { id:p.id, name:p.name, intro:p.intro, preparedBy:p.preparedBy||'', subtitle:p.subtitle||'', hasCode:!!(p.auth&&p.auth.clientHash), pieces:countPieces(p) }; }) };
     });
   }
   res.json(out);
@@ -326,6 +332,10 @@ app.post('/api/track/:id', requireAdmin, function(req,res){
   if(p.title!=null) tr.title = String(p.title).slice(0,200);
   ['note'].forEach(function(k){ if(p[k]!=null) tr[k]=String(p[k]).slice(0,300); });
   if(p.description!=null) tr.description = String(p.description).slice(0,2000);
+  if(p.producerNote && typeof p.producerNote==='object'){   // note to the client shown with a stage: { final:'…' }
+    if(!tr.producerNote || typeof tr.producerNote!=='object') tr.producerNote={};
+    ['cleaned','music','art','final'].forEach(function(k){ if(p.producerNote[k]!=null) tr.producerNote[k]=String(p.producerNote[k]).slice(0,2000); });
+  }
   if(p.recommended!=null){ var ri=parseInt(p.recommended,10); if(ri>=0&&ri<=2) tr.recommended=ri; }
   saveData(DATA); res.json({ok:true, track:tr});
 });
@@ -344,12 +354,7 @@ app.post('/api/track-delete', requireAdmin, function(req,res){
   const removed = removeTrackById(proj, id);
   if(!removed) return res.status(404).json({error:'no track'});
   delete proj.approvals[id];
-  ['cleaned','music','final'].forEach(function(stage){
-    var f = removed.audio && removed.audio[stage];
-    if(f){ try{ fs.unlinkSync(path.join(AUDIO_DIR, f)); }catch(e){} }
-  });
-  (removed.samples||[]).forEach(function(f){ if(f){ try{ fs.unlinkSync(path.join(AUDIO_DIR, f)); }catch(e){} } });
-  if(removed.cover){ try{ fs.unlinkSync(path.join(AUDIO_DIR, removed.cover)); }catch(e){} }
+  removeTrackFiles(removed);   // includes the raw recording, which the old inline cleanup missed
   saveData(DATA); res.json({ok:true});
 });
 app.post('/api/category-add', requireAdmin, function(req,res){
@@ -378,6 +383,34 @@ app.post('/api/client-add', requireAdmin, function(req,res){
   DATA.clients.push({ id:id, name:name, contact:{method:(req.body && req.body.method) || 'WhatsApp'}, projects:[] });
   saveData(DATA); res.json({ok:true, id:id});
 });
+app.post('/api/client-update', requireAdmin, function(req,res){
+  const {clientId, name} = req.body||{};
+  const c=(DATA.clients||[]).find(function(x){ return x.id===clientId; });
+  if(!c) return res.status(404).json({error:'no client'});
+  const nm=String(name||'').trim(); if(!nm) return res.status(400).json({error:'client name required'});
+  c.name=nm.slice(0,120); saveData(DATA); res.json({ok:true});
+});
+// client logo: png/jpg/webp/gif (no SVG — it can carry script), stored in the same volume and served from /media
+const LOGO_EXT = ['.png','.jpg','.jpeg','.webp','.gif'];
+app.post('/api/client-logo', requireAdmin, function(req,res,next){ upload.single('file')(req,res,function(err){ if(err) return res.status(400).json({error: err.code==='LIMIT_FILE_SIZE'?'File too large':'Upload failed'}); next(); }); }, function(req,res){
+  const cleanup=function(){ if(req.file){ try{ fs.unlinkSync(req.file.path); }catch(e){} } };
+  const c=(DATA.clients||[]).find(function(x){ return x.id===(req.body||{}).clientId; });
+  if(!c){ cleanup(); return res.status(404).json({error:'no client'}); }
+  if(!req.file) return res.status(400).json({error:'no file'});
+  const ext=path.extname(req.file.originalname||'').toLowerCase();
+  if(LOGO_EXT.indexOf(ext)<0 || !/^image\//.test(req.file.mimetype||'')){ cleanup(); return res.status(400).json({error:'Logo must be a PNG, JPG, WebP or GIF image'}); }
+  if(req.file.size>5*1024*1024){ cleanup(); return res.status(400).json({error:'Logo must be under 5 MB'}); }
+  const finalName='client-'+c.id+'-logo'+ext, dest=path.join(AUDIO_DIR, finalName), prev=c.logo;
+  try{ if(fs.existsSync(dest)) fs.unlinkSync(dest); fs.renameSync(req.file.path, dest); }
+  catch(e){ cleanup(); return res.status(500).json({error:'save failed'}); }
+  if(prev && prev!==finalName) removeStoreFile(prev);
+  c.logo=finalName; saveData(DATA); res.json({ok:true, logo:finalName});
+});
+app.post('/api/client-logo-delete', requireAdmin, function(req,res){
+  const c=(DATA.clients||[]).find(function(x){ return x.id===(req.body||{}).clientId; });
+  if(!c) return res.status(404).json({error:'no client'});
+  removeStoreFile(c.logo); c.logo=''; saveData(DATA); res.json({ok:true});
+});
 app.post('/api/project-add', requireAdmin, function(req,res){
   const {clientId, name, intro} = req.body||{};
   const nm=(name||'').trim(); if(!nm) return res.status(400).json({error:'project name required'});
@@ -387,6 +420,28 @@ app.post('/api/project-add', requireAdmin, function(req,res){
   c.projects.push({ id:id, name:nm, intro:(intro||'').trim(), preparedBy:'Craig Young', auth:{}, categories:[], approvals:{} });
   if(req.session) req.session.projectId=id;   // make the new project active
   saveData(DATA); res.json({ok:true, id:id});
+});
+// Permanent: removes the project, its pieces, approvals and every uploaded file. Always keeps at least one project so the admin has somewhere to land.
+app.post('/api/project-delete', requireAdmin, function(req,res){
+  const found=findProject((req.body||{}).projectId);
+  if(!found) return res.status(404).json({error:'no project'});
+  if(allProjects().length<=1) return res.status(400).json({error:'This is the only project. Add another project before deleting it.'});
+  removeProjectFiles(found.project);
+  found.client.projects=found.client.projects.filter(function(p){ return p!==found.project; });
+  Object.keys(sessions).forEach(function(k){ if(sessions[k].projectId===found.project.id) sessions[k].projectId=null; });
+  saveData(DATA); res.json({ok:true});
+});
+// Permanent: removes the client, their logo, and all of their projects (with files). Refuses if it would leave no project at all.
+app.post('/api/client-delete', requireAdmin, function(req,res){
+  const c=(DATA.clients||[]).find(function(x){ return x.id===(req.body||{}).clientId; });
+  if(!c) return res.status(404).json({error:'no client'});
+  if(allProjects().filter(function(x){ return x.client!==c; }).length<1) return res.status(400).json({error:'This client has the only project. Add another client or project before deleting.'});
+  const ids=(c.projects||[]).map(function(p){ return p.id; });
+  (c.projects||[]).forEach(function(p){ removeProjectFiles(p); });
+  removeStoreFile(c.logo);
+  DATA.clients=DATA.clients.filter(function(x){ return x!==c; });
+  Object.keys(sessions).forEach(function(k){ if(ids.indexOf(sessions[k].projectId)>=0) sessions[k].projectId=null; });
+  saveData(DATA); res.json({ok:true});
 });
 app.post('/api/project-select', requireAdmin, function(req,res){
   const {projectId} = req.body||{};
@@ -402,6 +457,7 @@ app.post('/api/project-update', requireAdmin, function(req,res){
   if(p.name!=null && String(p.name).trim()) proj.name=String(p.name).trim().slice(0,140);
   if(p.intro!=null) proj.intro=String(p.intro).slice(0,2000);
   if(p.preparedBy!=null) proj.preparedBy=String(p.preparedBy).slice(0,120);
+  if(p.subtitle!=null) proj.subtitle=String(p.subtitle).slice(0,200);   // blank = auto "Prepared for … · produced by …"
   if(p.payUrl!=null){
     var u=String(p.payUrl).trim().slice(0,500);
     if(u==='' || /^https?:\/\//i.test(u)) proj.payUrl=u;

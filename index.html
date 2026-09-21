@@ -66,6 +66,14 @@
 
   .main{margin-left:262px;flex:1;padding:26px 30px 110px;max-width:1000px}
   .intro-band{background:linear-gradient(180deg,#fff 0%,#f9fafd 100%);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px;box-shadow:var(--shadow)}
+  .intro-band.has-logo{display:flex;align-items:flex-start;gap:20px}
+  .ib-logo{max-height:84px;max-width:170px;width:auto;object-fit:contain;flex:none;border-radius:6px}
+  .ib-text{min-width:0;flex:1}
+  .producer-note{margin-top:10px;font-size:13px;line-height:1.5;color:var(--ink);background:#fbf7ec;border-left:3px solid var(--gold);border-radius:8px;padding:10px 13px}
+  .producer-note .pn-lbl{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:4px}
+  .pn-edit{width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;min-height:64px;resize:vertical}
+  .logo-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:6px 0 12px}
+  .logo-thumb{height:46px;max-width:120px;object-fit:contain;border:1px solid var(--line);border-radius:6px;background:#fff;padding:3px}
   .ib-title{font-family:'Fraunces',serif;font-size:27px;font-weight:600;color:var(--navy);margin-bottom:6px}
   .ib-sub{font-size:13px;color:var(--muted);margin-bottom:12px}
   .ib-intro{font-size:14px;color:var(--ink);max-width:640px}
@@ -293,11 +301,14 @@
       </aside>
 
       <main class="main">
-        <div class="intro-band">
-          <div class="ib-title" id="ibTitle"></div>
-          <div class="ib-sub" id="ibSub"></div>
-          <div class="ib-intro" id="ibIntro"></div>
-          <div class="admin-hint" id="adminHint" style="display:none">Admin mode — upload audio to any stage and toggle when it's ready for the client to review.</div>
+        <div class="intro-band" id="introBand">
+          <img class="ib-logo" id="ibLogo" alt="" style="display:none" />
+          <div class="ib-text">
+            <div class="ib-title" id="ibTitle"></div>
+            <div class="ib-sub" id="ibSub"></div>
+            <div class="ib-intro" id="ibIntro"></div>
+            <div class="admin-hint" id="adminHint" style="display:none">Admin mode — upload audio to any stage and toggle when it's ready for the client to review.</div>
+          </div>
         </div>
         <div class="pipe-legend">
           <div class="flow"><span title="Your raw recording is in. Craig confirms it's good to produce, or flags a re-record.">Vocal Received</span><span class="arrow">→</span><span title="Craig's cleaned, produced version of your vocal. Approve it or request a change.">Produced Vocal</span><span class="arrow">→</span><span title="Your vocal set to music — pick the option you love.">Music Samples</span><span class="arrow">→</span><span title="Your cover artwork — upload your own or approve the studio-created design.">Cover Art</span><span class="arrow">→</span><span title="The finished master. Approve it and complete your purchase.">Final</span></div>
@@ -376,8 +387,11 @@
     document.getElementById('sideClient').textContent=D.client.name;
     document.getElementById('sideProj').textContent=D.project.name;
     document.getElementById('ibTitle').textContent=D.project.name;
-    document.getElementById('ibSub').textContent='Prepared for '+D.client.name+'  ·  produced by '+(D.project.preparedBy||'Craig Young');
+    document.getElementById('ibSub').textContent=D.project.subtitle || ('Prepared for '+D.client.name+'  ·  produced by '+(D.project.preparedBy||'Craig Young'));
     document.getElementById('ibIntro').textContent=D.project.intro||'';
+    var ibLogo=document.getElementById('ibLogo'), band=document.getElementById('introBand');
+    if(D.client.logo){ ibLogo.src='media/'+encodeURIComponent(D.client.logo)+'?v='+encodeURIComponent(D.client.logo); ibLogo.alt=D.client.name; ibLogo.style.display=''; band.classList.add('has-logo'); }
+    else{ ibLogo.removeAttribute('src'); ibLogo.style.display='none'; band.classList.remove('has-logo'); }
     document.getElementById('copyBtn').textContent=(D.contact&&D.contact.label)?D.contact.label:'Copy my approvals';
     document.getElementById('copyBtn').style.display = vr()==='admin' ? 'none' : '';
     document.getElementById('previewBanner').textContent='Previewing as '+D.client.name+' — exactly what the client sees. Read-only: to actually approve or request a change, log in with the client code.';
@@ -531,6 +545,41 @@
   }
 
   // ---- Clients & projects (admin) ----
+  // per-client name + logo (logo shows in the header band the client sees)
+  function clientBrandRow(c){
+    var row=document.createElement('div');row.className='logo-row';
+    if(c.logo){ var im=document.createElement('img');im.className='logo-thumb';im.src='media/'+encodeURIComponent(c.logo);im.alt=c.name+' logo';row.appendChild(im); }
+    var nm=document.createElement('input');nm.value=c.name;nm.placeholder='Client name';nm.style.cssText='font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;min-width:170px';
+    var sv=document.createElement('button');sv.type='button';sv.className='mini-btn ghost';sv.textContent='Rename';
+    sv.addEventListener('click',function(){ var v=nm.value.trim(); if(!v||v===c.name) return; sv.disabled=true;
+      api('POST','/api/client-update',{clientId:c.id,name:v}).then(reloadKeepOpen).catch(function(e){ sv.disabled=false; alert((e&&e.error)||'Rename failed'); }); });
+    row.appendChild(nm); row.appendChild(sv);
+    var pick=document.createElement('label');pick.className='mini-btn ghost';pick.textContent=c.logo?'Replace logo':'Upload logo';
+    var fi=document.createElement('input');fi.type='file';fi.accept='image/png,image/jpeg,image/webp,image/gif';fi.hidden=true;pick.appendChild(fi);
+    fi.addEventListener('change',function(){
+      var f=fi.files&&fi.files[0]; if(!f) return;
+      pick.classList.add('off'); pick.firstChild.textContent='Uploading…';
+      var fd=new FormData();fd.append('file',f);fd.append('clientId',c.id);
+      fetch('/api/client-logo',{method:'POST',body:fd}).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw j; return j; }); }).then(reloadKeepOpen)
+        .catch(function(e){ pick.classList.remove('off'); pick.firstChild.textContent=c.logo?'Replace logo':'Upload logo'; fi.value=''; alert((e&&e.error)||'Logo upload failed'); });
+    });
+    row.appendChild(pick);
+    var dc=document.createElement('button');dc.type='button';dc.className='mini-btn ghost danger';dc.textContent='Delete client';
+    dc.addEventListener('click',function(){
+      var n=(c.projects||[]).length, pieces=(c.projects||[]).reduce(function(a,p){ return a+(p.pieces||0); },0);
+      var typed=window.prompt('This permanently deletes the client "'+c.name+'": '+n+' project(s), '+pieces+' piece(s), their approvals, logo and every uploaded file. It cannot be undone.\n\nType the client name to confirm:');
+      if(typed==null) return;
+      if(typed.trim()!==c.name){ alert('That did not match the client name. Nothing was deleted.'); return; }
+      api('POST','/api/client-delete',{clientId:c.id}).then(function(){ FILTER='__clients__'; return reloadKeepOpen(); }).catch(function(e){ alert((e&&e.error)||'Delete failed'); });
+    });
+    row.appendChild(dc);
+    if(c.logo){
+      var rm=document.createElement('button');rm.type='button';rm.className='mini-btn ghost danger';rm.textContent='Remove logo';
+      rm.addEventListener('click',function(){ if(!confirm('Remove the logo for '+c.name+'?')) return; api('POST','/api/client-logo-delete',{clientId:c.id}).then(reloadKeepOpen).catch(function(){ alert('Remove failed'); }); });
+      row.appendChild(rm);
+    }
+    return row;
+  }
   function renderClients(){
     var wrap=document.createElement('div');
     var head=document.createElement('div');head.className='dash-sec';
@@ -546,11 +595,16 @@
           h+='<div class="dash-item"><div class="di-body"><div class="di-title">'+esc(p.name)+(active?' <span class="di-tag note">active</span>':'')+'</div>'
             +'<div class="di-sub">'+p.pieces+' pieces · '+(p.hasCode?'client code set':'no client code yet')+'</div></div>'
             +'<button class="mini-btn ghost" data-open="'+esc(p.id)+'"'+(active?' disabled':'')+'>Open</button>'
-            +'<button class="mini-btn ghost" data-code="'+esc(p.id)+'">Set code</button></div>';
+            +'<button class="mini-btn ghost" data-code="'+esc(p.id)+'">Set code</button>'
+            +'<button class="mini-btn ghost" data-edit="'+esc(p.id)+'">Edit</button>'
+            +'<button class="mini-btn ghost danger" data-del="'+esc(p.id)+'">Delete</button></div>'
+            +'<div class="proj-edit" data-editbox="'+esc(p.id)+'" style="display:none"></div>';
         });
       } else h+='<div class="dash-empty">No projects yet.</div>';
       h+='<div class="acct-form"><input class="npName" placeholder="New project name" /><input class="npIntro" placeholder="Client intro (optional)" style="min-width:240px" /><button class="mini-btn" data-addproj="'+esc(c.id)+'">Add project</button></div>';
-      sec.innerHTML=h; wrap.appendChild(sec);
+      sec.innerHTML=h;
+      sec.insertBefore(clientBrandRow(c), sec.children[1]||null);   // name + logo controls, right under the client heading
+      wrap.appendChild(sec);
     });
     host.appendChild(wrap);
     var ncMsg=document.getElementById('ncMsg');
@@ -577,6 +631,37 @@
         api('POST','/api/project-set-code',{projectId:btn.getAttribute('data-code'),code:code}).then(reloadKeepOpen).catch(function(e){ alert((e&&e.error)||'Failed'); });
       });
     });
+    // edit a project inline (name, intro, produced by, header line). Payment link stays in Project settings for the active project.
+    var PROJ={}; (D.clients||[]).forEach(function(c){ c.projects.forEach(function(p){ PROJ[p.id]=p; }); });
+    wrap.querySelectorAll('[data-edit]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var id=btn.getAttribute('data-edit'), p=PROJ[id], box=wrap.querySelector('[data-editbox="'+id+'"]');
+        if(box.style.display!=='none'){ box.style.display='none'; return; }
+        box.innerHTML='<div class="acct-form" style="flex-direction:column;align-items:stretch;max-width:560px;margin:8px 0 12px">'
+          +'<input data-f="name" placeholder="Project name" value="'+esc(p.name)+'" />'
+          +'<input data-f="prep" placeholder="Produced by" value="'+esc(p.preparedBy||'')+'" />'
+          +'<input data-f="sub" placeholder="Header line (blank = Prepared for … · produced by …)" value="'+esc(p.subtitle||'')+'" />'
+          +'<textarea data-f="intro" placeholder="Client intro" style="font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;min-height:70px;resize:vertical">'+esc(p.intro||'')+'</textarea>'
+          +'<div><button class="mini-btn" data-save>Save project</button> <button class="mini-btn ghost" data-close>Cancel</button></div></div>';
+        box.style.display='block';
+        function f(k){ return box.querySelector('[data-f="'+k+'"]').value; }
+        box.querySelector('[data-close]').addEventListener('click',function(){ box.style.display='none'; });
+        box.querySelector('[data-save]').addEventListener('click',function(){
+          if(!f('name').trim()){ box.querySelector('[data-f="name"]').focus(); return; }
+          api('POST','/api/project-update',{projectId:id,name:f('name').trim(),preparedBy:f('prep').trim(),subtitle:f('sub').trim(),intro:f('intro')}).then(reloadKeepOpen).catch(function(e){ alert((e&&e.error)||'Save failed'); });
+        });
+      });
+    });
+    // delete a project — permanent, so the name has to be typed to confirm
+    wrap.querySelectorAll('[data-del]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var id=btn.getAttribute('data-del'), p=PROJ[id];
+        var typed=window.prompt('This permanently deletes the project "'+p.name+'": '+p.pieces+' piece(s), their approvals and every uploaded file. It cannot be undone.\n\nType the project name to confirm:');
+        if(typed==null) return;
+        if(typed.trim()!==p.name){ alert('That did not match the project name. Nothing was deleted.'); return; }
+        api('POST','/api/project-delete',{projectId:id}).then(function(){ FILTER='__clients__'; return reloadKeepOpen(); }).catch(function(e){ alert((e&&e.error)||'Delete failed'); });
+      });
+    });
   }
 
   // ---- Project settings (admin) ----
@@ -586,6 +671,7 @@
       +'<div class="acct-form" style="flex-direction:column;align-items:stretch;max-width:560px">'
       +'<input id="stName" placeholder="Project name" value="'+esc(D.project.name)+'" />'
       +'<input id="stPrep" placeholder="Produced by" value="'+esc(D.project.preparedBy||'')+'" />'
+      +'<input id="stSub" placeholder="Header line (blank = &quot;Prepared for '+esc(D.client.name)+' · produced by '+esc(D.project.preparedBy||'Craig Young')+'&quot;)" value="'+esc(D.project.subtitle||'')+'" />'
       +'<textarea id="stIntro" placeholder="Client intro" style="font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;min-height:90px;resize:vertical">'+esc(D.project.intro||'')+'</textarea>'
       +'<div class="lbl" style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-top:6px">Payment (Approve &amp; Pay button)</div>'
       +'<input id="stPayUrl" placeholder="Stripe payment link (https://buy.stripe.com/...)" value="'+esc(D.project.payUrl||'')+'" />'
@@ -597,8 +683,9 @@
       var msg=document.getElementById('stMsg');
       var nameVal=document.getElementById('stName').value.trim(), introVal=document.getElementById('stIntro').value, prepVal=document.getElementById('stPrep').value.trim();
       var payUrlVal=document.getElementById('stPayUrl').value.trim(), payLabelVal=document.getElementById('stPayLabel').value.trim();
-      api('POST','/api/project-update',{projectId:D.project.id,name:nameVal,intro:introVal,preparedBy:prepVal,payUrl:payUrlVal,payLabel:payLabelVal})
-        .then(function(){ if(nameVal) D.project.name=nameVal; D.project.intro=introVal; D.project.preparedBy=prepVal; D.project.payUrl=payUrlVal; D.project.payLabel=payLabelVal; applyProjectChrome(); msg.className='acct-msg ok'; msg.textContent='Saved.'; })
+      var subVal=document.getElementById('stSub').value.trim();
+      api('POST','/api/project-update',{projectId:D.project.id,name:nameVal,intro:introVal,preparedBy:prepVal,subtitle:subVal,payUrl:payUrlVal,payLabel:payLabelVal})
+        .then(function(){ if(nameVal) D.project.name=nameVal; D.project.intro=introVal; D.project.preparedBy=prepVal; D.project.subtitle=subVal; D.project.payUrl=payUrlVal; D.project.payLabel=payLabelVal; applyProjectChrome(); msg.className='acct-msg ok'; msg.textContent='Saved.'; })
         .catch(function(e){ msg.className='acct-msg err'; msg.textContent=(e&&e.error)||'Failed'; });
     });
   }
@@ -686,6 +773,26 @@
     }
     box.appendChild(state);
     return box;
+  }
+  // Note from the producer shown to the client next to a stage (visible once the stage is ready); admin edits it in the admin box.
+  function producerNoteView(tr,stage){
+    var n=(tr.producerNote&&tr.producerNote[stage])||''; if(!n) return null;
+    var d=document.createElement('div');d.className='producer-note';
+    d.innerHTML='<div class="pn-lbl">Note from '+esc(D.project.preparedBy||'your producer')+'</div>'+esc(n).replace(/\n/g,'<br>');
+    return d;
+  }
+  function producerNoteEditor(tr,stage){
+    var w=document.createElement('div');w.style.marginTop='8px';
+    var cur=(tr.producerNote&&tr.producerNote[stage])||'';
+    w.innerHTML='<div class="uling" style="margin-bottom:4px">Note to the client, shown with this stage once it is ready (optional)</div>'
+      +'<textarea class="pn-edit" placeholder="e.g. Mixed at a gentle level for sleep listening. Let me know if you would like it brighter."></textarea><span class="uling" data-pn-msg></span>';
+    var ta=w.querySelector('textarea'), msg=w.querySelector('[data-pn-msg]'); ta.value=cur;
+    ta.addEventListener('change',function(){
+      var v=ta.value.trim(), patch={producerNote:{}}; patch.producerNote[stage]=v;
+      api('POST','/api/track/'+tr.id,patch).then(function(){ if(!tr.producerNote) tr.producerNote={}; tr.producerNote[stage]=v; msg.textContent='Saved ✓'; })
+        .catch(function(){ msg.textContent='Save failed'; });
+    });
+    return w;
   }
   var REPLACE_WARN='The client has already approved this. Replacing it clears their approval so they review the new file. Continue?';
   var REMOVE_WARN='This also clears any client approval and takes the stage back to not ready.';
@@ -862,6 +969,7 @@
     var el=stageEl(num||'4','Cover Art',chip[0],chip[1],"Your cover artwork — upload your own or approve the studio-created design.");
     if(ready){
       el.insertAdjacentHTML('beforeend', file?'<img class="cover-img" src="media/'+encodeURIComponent(file)+'" alt="cover artwork" />':'<div class="no-cover">No cover uploaded yet.</div>');
+      if(vr()==='client'){ var pnvA=producerNoteView(tr,'art'); if(pnvA) el.appendChild(pnvA); }
       if(vr()==='client'){
         var actions=document.createElement('div');actions.className='stage-actions';
         actions.innerHTML='<button class="approve-btn'+(approved?' on':'')+'">'+(approved?'Approved ✓':'Approve cover')+'</button><button class="note-toggle">Request a change</button>';
@@ -887,6 +995,7 @@
       ab.querySelector('[data-file-row]').appendChild(fileControl({tr:tr,stage:'art',cur:file,accept:'image/*',label:'Upload cover',warn:approved?REPLACE_WARN:'',removeWarn:REMOVE_WARN}));
       var readyCb=ab.querySelector('[data-ready]');
       readyCb.addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{art:readyCb.checked}).then(reloadKeepOpen); });
+      ab.appendChild(producerNoteEditor(tr,'art'));
       el.appendChild(ab);
     }
     return el;
@@ -902,6 +1011,7 @@
 
     if(ready){
       el.insertAdjacentHTML('beforeend',audioHtml(file));
+      if(vr()==='client'){ var pnv=producerNoteView(tr,stage); if(pnv) el.appendChild(pnv); }
       if(vr()==='client'){
         var actions=document.createElement('div');actions.className='stage-actions';
         var approveHandler;
@@ -937,6 +1047,7 @@
       ab.querySelector('[data-file-row]').appendChild(fileControl({tr:tr,stage:stage,cur:file,warn:approved?REPLACE_WARN:'',removeWarn:REMOVE_WARN}));
       var readyCb=ab.querySelector('[data-ready]');
       readyCb.addEventListener('change',function(){ var patch={};patch[stage]=readyCb.checked; api('POST','/api/track/'+tr.id,patch).then(reloadKeepOpen); });
+      ab.appendChild(producerNoteEditor(tr,stage));
       el.appendChild(ab);
     }
     return el;
@@ -953,6 +1064,7 @@
 
     if(ready){
       var anyFile=false;
+      if(vr()==='client'){ var pnvM=producerNoteView(tr,'music'); if(pnvM) el.appendChild(pnvM); }
       samples.forEach(function(f,i){
         if(!f) return; anyFile=true;
         var chosen=(sel===i);
@@ -1002,6 +1114,7 @@
       ab.appendChild(readyRow);
       ab.querySelectorAll('[data-rec]').forEach(function(r){ r.addEventListener('change',function(){ if(r.checked) api('POST','/api/track/'+tr.id,{recommended:parseInt(r.getAttribute('data-rec'),10)}).then(reloadKeepOpen); }); });
       ab.querySelector('[data-ready]').addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{music:this.checked}).then(reloadKeepOpen); });
+      ab.appendChild(producerNoteEditor(tr,'music'));
       el.appendChild(ab);
     }
     return el;
@@ -1016,6 +1129,7 @@
 
     if(ready){
       el.insertAdjacentHTML('beforeend',audioHtml(file));
+      if(vr()==='client'){ var pnvF=producerNoteView(tr,'final'); if(pnvF) el.appendChild(pnvF); }
       if(vr()==='client'){
         var dual=document.createElement('div');dual.className='dual-approve';
         dual.innerHTML='<button class="approve-btn'+(levels?' on':'')+'" data-lev>'+(levels?'Levels approved ✓':'Approve levels')+'</button>'
@@ -1069,6 +1183,7 @@
       ab.querySelector('[data-file-row]').appendChild(fileControl({tr:tr,stage:'final',cur:file,warn:(levels||wording)?REPLACE_WARN:'',removeWarn:REMOVE_WARN}));
       var readyCb=ab.querySelector('[data-ready]');
       readyCb.addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{final:readyCb.checked}).then(reloadKeepOpen); });
+      ab.appendChild(producerNoteEditor(tr,'final'));
       el.appendChild(ab);
     }
     return el;
