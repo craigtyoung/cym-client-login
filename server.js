@@ -700,11 +700,33 @@ app.post('/api/upload-delete', requireAdmin, function(req,res){
 });
 
 // ---- audio + media (covers) — both served from the store dir ----
+// The files a CLIENT may fetch: only their own project's files, and only for stages released to them (plus their logo and project artwork).
+// Matching against what the project actually references (not a filename prefix) means one client can never reach another's files,
+// and a held-back cover or an unreleased final master is not reachable even by someone who guesses its name.
+function releasedFiles(project, client){
+  var set={}, add=function(f){ if(f) set[f]=1; };
+  eachTrack(project, function(tr){
+    var au=tr.audio||{};
+    add(au.raw);                                                     // their own recording
+    if(tr.cleaned) add(au.cleaned);
+    if(tr.music){ (tr.samples||[]).forEach(add); add(au.music); }
+    if(tr.final) add(au.final);
+    if(tr.art) add(tr.cover);
+  });
+  add(project.art); if(client) add(client.logo);
+  return set;
+}
 function serveStoreFile(req,res){
+  const s=sessionOf(req);
+  if(!s) return res.status(401).end();                               // files need a login
   const f = path.basename(req.params.file);
+  if(s.role!=='admin'){
+    const ctx=findProject(s.projectId);
+    if(!ctx || !releasedFiles(ctx.project, ctx.client)[f]) return res.status(404).end();   // 404, not 403: don't confirm the file exists
+  }
   const p = path.join(AUDIO_DIR, f);
   if(!fs.existsSync(p)) return res.status(404).end();
-  res.set('Cache-Control','no-cache');   // replaced files keep their name — always revalidate so a swap shows up straight away
+  res.set('Cache-Control','private, no-cache');   // never cached by shared proxies; replaced files keep their name so always revalidate
   res.sendFile(p);
 }
 app.get('/audio/:file', serveStoreFile);
