@@ -169,6 +169,10 @@
   .mini-btn{font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--navy);background:var(--navy);color:#fff;padding:6px 12px;border-radius:8px}
   .mini-btn.ghost{background:#fff;color:var(--navy)}
   .mini-btn:disabled{opacity:.5;cursor:default}
+  .file-ctl{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+  label.mini-btn{display:inline-block}
+  .mini-btn.off{opacity:.5;pointer-events:none}
+  .mini-btn.danger{color:var(--alert);border-color:var(--alert)}
   .admin-row select{font-family:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--line);border-radius:8px}
   .toggle-lbl{font-size:12.5px;color:var(--ink);display:inline-flex;align-items:center;gap:6px;cursor:pointer}
   .uling{font-size:11.5px;color:var(--muted)}
@@ -414,6 +418,7 @@
     if(tr.cleaned && !a.cleanedApproved) return ['Vocal ready for approval','await'];
     if(tr.cleaned && a.cleanedApproved) return ['In production — music & final','neutral'];
     if(tr.raw==='accepted') return ['Approved — in production','neutral'];
+    if(tr.raw==='none') return ['Not received','neutral'];
     return ['Received','neutral'];
   }
 
@@ -647,22 +652,43 @@
     });
     return wrap;
   }
-  // reusable upload control (used for the Raw stage — client submits their recording)
-  function uploadRow(tr, stage, label){
-    var box=document.createElement('div');box.className='upload-box';
-    var cur = tr.audio && tr.audio[stage];
-    box.innerHTML='<div class="ulbl">'+esc(label)+'</div><div class="admin-row"><input type="file" accept="audio/*" data-file><button class="mini-btn" data-up>Upload</button><span class="uling">'+(cur?('current: '+esc(cur)):'no file yet')+'</span></div>';
-    var fi=box.querySelector('[data-file]'), ub=box.querySelector('[data-up]');
-    if(PREVIEW){ ub.disabled=true; fi.disabled=true; }
-    ub.addEventListener('click',function(){
-      if(!fi.files||!fi.files[0]) return;
-      ub.disabled=true; ub.textContent='Uploading…';
-      var fd=new FormData(); fd.append('file',fi.files[0]); fd.append('trackId',tr.id); fd.append('stage',stage);
+  // Shared upload control for every stage. Pick a file and it uploads straight away.
+  // Once a file is there it becomes Replace (uploads over the old one) + Remove (admin only).
+  // o: { tr, stage, cur (current filename), label, accept, sampleIndex, warn (confirm text if replacing clears an approval), removeWarn }
+  function fileControl(o){
+    var tr=o.tr, cur=o.cur||'';
+    var box=document.createElement('span');box.className='file-ctl';
+    var pick=document.createElement('label');pick.className='mini-btn'+(cur?' ghost':'');
+    pick.textContent=cur?'Replace':(o.label||'Upload file');
+    var fi=document.createElement('input');fi.type='file';fi.accept=o.accept||'audio/*';fi.hidden=true;
+    pick.appendChild(fi);
+    var state=document.createElement('span');state.className='uling';state.textContent=cur||'no file yet';
+    box.appendChild(pick);
+    if(PREVIEW){ fi.disabled=true; pick.classList.add('off'); pick.title='Read-only preview'; }
+    fi.addEventListener('change',function(){
+      var f=fi.files&&fi.files[0]; if(!f) return;
+      if(cur && o.warn && !confirm(o.warn)){ fi.value=''; return; }
+      pick.classList.add('off'); state.textContent='Uploading…';
+      var fd=new FormData();fd.append('file',f);fd.append('trackId',tr.id);fd.append('stage',o.stage);
+      if(o.sampleIndex!=null) fd.append('sampleIndex',o.sampleIndex);
       fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){ if(j.error) throw j; reloadKeepOpen(); })
-        .catch(function(){ ub.disabled=false; ub.textContent='Upload'; alert('Upload failed'); });
+        .catch(function(){ pick.classList.remove('off'); state.textContent=cur||'no file yet'; fi.value=''; alert('Upload failed'); });
     });
+    if(cur && vr()==='admin' && !PREVIEW){
+      var rm=document.createElement('button');rm.type='button';rm.className='mini-btn ghost danger';rm.textContent='Remove';
+      rm.addEventListener('click',function(){
+        if(!confirm('Remove this file?'+(o.removeWarn?' '+o.removeWarn:''))) return;
+        rm.disabled=true;
+        var body={trackId:tr.id,stage:o.stage}; if(o.sampleIndex!=null) body.sampleIndex=o.sampleIndex;
+        api('POST','/api/upload-delete',body).then(reloadKeepOpen).catch(function(){ rm.disabled=false; alert('Remove failed'); });
+      });
+      box.appendChild(rm);
+    }
+    box.appendChild(state);
     return box;
   }
+  var REPLACE_WARN='The client has already approved this. Replacing it clears their approval so they review the new file. Continue?';
+  var REMOVE_WARN='This also clears any client approval and takes the stage back to not ready.';
   function addCollectionControl(){
     var wrap=document.createElement('div');wrap.className='admin-add';
     var btn=document.createElement('button');btn.className='add-btn';btn.textContent='+ Add collection';
@@ -718,7 +744,7 @@
     var hasRaw = !!(tr.audio && tr.audio.raw);
     var rawTip = st.raw==='alert' ? "This recording needs to be re-recorded — please record again and upload it."
                : st.raw==='done'  ? "Your recording is in and approved for production."
-               : hasRaw           ? "Your recording is in, awaiting Craig's quality check."
+               : (hasRaw && tr.raw!=='none') ? "Your recording is in, awaiting Craig's quality check."
                :                     "Waiting on your recording to begin production.";
     var row=document.createElement('div');row.className='row';
     row.innerHTML='<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+'</div></div>'
@@ -760,23 +786,29 @@
     }
 
     // Stage 1 — Vocal Received
-    var rawChip=tr.raw==='accepted'?['done','Approved']:(tr.raw==='rerecord'?['alert','Re-record']:['lock','Received']);
+    var rawChip=tr.raw==='accepted'?['done','Approved']:(tr.raw==='rerecord'?['alert','Re-record']:(tr.raw==='none'?['lock','Not received']:['lock','Received']));
     var s1=stageEl('1','Vocal Received',rawChip[0],rawChip[1],"Your raw recording is in. Craig approves the recording quality so it can go into production, or flags a re-record.");
     if(tr.raw==='rerecord') s1.insertAdjacentHTML('beforeend','<div class="rerecord-banner">This recording needs to be re-recorded. Please record again and upload it below.</div>');
     else {
       var hasRawFile = !!(tr.audio && tr.audio.raw);
       var rawMsg = tr.raw==='accepted' ? 'Recording is in and approved for production.'
                  : (vr()==='client' ? 'Upload your recording here so it can go into production.'
-                 : (hasRawFile ? 'Recording is in, awaiting your review.' : 'No recording uploaded yet.'));
+                 : (tr.raw==='none' ? 'No recording received yet.' : (hasRawFile ? 'Recording is in, awaiting your review.' : 'No recording uploaded yet.')));
       s1.insertAdjacentHTML('beforeend','<div class="stage-body">'+rawMsg+'</div>');
     }
     if(tr.audio && tr.audio.raw) s1.insertAdjacentHTML('beforeend', audioHtml(tr.audio.raw));
-    s1.appendChild(uploadRow(tr,'raw', vr()==='client' ? (tr.raw==='rerecord'?'Re-record and upload':'Upload your recording') : "Upload raw recording (on client's behalf)"));
+    var rawBox=document.createElement('div');rawBox.className='upload-box';
+    rawBox.innerHTML='<div class="ulbl">'+esc(vr()==='client' ? (tr.raw==='rerecord'?'Re-record and upload':'Upload your recording') : "Raw recording (upload on client's behalf)")+'</div>';
+    rawBox.appendChild(fileControl({tr:tr,stage:'raw',cur:tr.audio&&tr.audio.raw,label:vr()==='client'?'Upload recording':'Upload file',
+      warn:tr.raw==='accepted'?'This recording is already approved. Replacing it puts it back to "Received" for a fresh check. Continue?':'',
+      removeWarn:'The vocal status goes back to Not received.'}));
+    s1.appendChild(rawBox);
     if(vr()==='admin'){
       var ab=document.createElement('div');ab.className='admin-box';
       ab.innerHTML='<div class="lbl">Admin</div>'
         +'<div class="admin-row">Vocal status: '
         +'<select data-raw title="Your quality gate. Received = uploaded, awaiting your check. Approved = quality is good, into production. Needs re-record = not usable, back to the client.">'
+        +'<option value="none" title="No recording has come in yet — use this to undo a Received or Approved status set by mistake">Not received yet</option>'
         +'<option value="received" title="Uploaded — awaiting your quality check">Received — awaiting your check</option>'
         +'<option value="accepted" title="Quality is good — send it into production">Approved — good to produce</option>'
         +'<option value="rerecord" title="Not usable — send it back to the client to record again">Needs re-record</option>'
@@ -850,16 +882,10 @@
     if(vr()==='admin'){
       var ab=document.createElement('div');ab.className='admin-box';
       ab.innerHTML='<div class="lbl">Admin — Cover Art</div>'
-        +'<div class="admin-row"><input type="file" accept="image/*" data-file><button class="mini-btn" data-up>Upload cover</button><span class="uling" data-cur>'+(file?('current: '+esc(file)):'no cover yet')+'</span></div>'
+        +'<div class="admin-row" data-file-row></div>'
         +'<div class="admin-row"><label class="toggle-lbl"><input type="checkbox" data-ready '+(ready?'checked':'')+'> Ready for client to review</label></div>';
-      var fileInput=ab.querySelector('[data-file]'), upBtn=ab.querySelector('[data-up]'), readyCb=ab.querySelector('[data-ready]');
-      upBtn.addEventListener('click',function(){
-        if(!fileInput.files||!fileInput.files[0]) return;
-        upBtn.disabled=true;upBtn.textContent='Uploading…';
-        var fd=new FormData();fd.append('file',fileInput.files[0]);fd.append('trackId',tr.id);fd.append('stage','art');
-        fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(){ reloadKeepOpen(); })
-          .catch(function(){ upBtn.disabled=false;upBtn.textContent='Upload cover'; alert('Upload failed'); });
-      });
+      ab.querySelector('[data-file-row]').appendChild(fileControl({tr:tr,stage:'art',cur:file,accept:'image/*',label:'Upload cover',warn:approved?REPLACE_WARN:'',removeWarn:REMOVE_WARN}));
+      var readyCb=ab.querySelector('[data-ready]');
       readyCb.addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{art:readyCb.checked}).then(reloadKeepOpen); });
       el.appendChild(ab);
     }
@@ -906,16 +932,10 @@
     if(vr()==='admin'){
       var ab=document.createElement('div');ab.className='admin-box';
       ab.innerHTML='<div class="lbl">Admin — '+esc(name)+'</div>'
-        +'<div class="admin-row"><input type="file" accept="audio/*" data-file><button class="mini-btn" data-up>Upload</button><span class="uling" data-cur>'+(file?('current: '+esc(file)):'no file yet')+'</span></div>'
+        +'<div class="admin-row" data-file-row></div>'
         +'<div class="admin-row"><label class="toggle-lbl"><input type="checkbox" data-ready '+(ready?'checked':'')+'> Ready for client to review</label></div>';
-      var fileInput=ab.querySelector('[data-file]'), upBtn=ab.querySelector('[data-up]'), readyCb=ab.querySelector('[data-ready]');
-      upBtn.addEventListener('click',function(){
-        if(!fileInput.files||!fileInput.files[0]){ return; }
-        upBtn.disabled=true;upBtn.textContent='Uploading…';
-        var fd=new FormData();fd.append('file',fileInput.files[0]);fd.append('trackId',tr.id);fd.append('stage',stage);
-        fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(){ reloadKeepOpen(); })
-          .catch(function(){ upBtn.disabled=false;upBtn.textContent='Upload'; alert('Upload failed'); });
-      });
+      ab.querySelector('[data-file-row]').appendChild(fileControl({tr:tr,stage:stage,cur:file,warn:approved?REPLACE_WARN:'',removeWarn:REMOVE_WARN}));
+      var readyCb=ab.querySelector('[data-ready]');
       readyCb.addEventListener('change',function(){ var patch={};patch[stage]=readyCb.checked; api('POST','/api/track/'+tr.id,patch).then(reloadKeepOpen); });
       el.appendChild(ab);
     }
@@ -973,25 +993,14 @@
         var cur=samples[i];
         var row=document.createElement('div');row.className='admin-row';
         row.innerHTML='<label class="toggle-lbl" style="min-width:70px"><input type="radio" name="rec-'+esc(tr.id)+'" '+(i===rec?'checked':'')+' data-rec="'+i+'"> Rec.</label>'
-          +'<span style="font-size:12px;min-width:56px">Option '+(i+1)+'</span>'
-          +'<input type="file" accept="audio/*" data-file="'+i+'"><button class="mini-btn" data-up="'+i+'">Upload</button>'
-          +'<span class="uling">'+(cur?('current: '+esc(cur)):'no file')+'</span>';
+          +'<span style="font-size:12px;min-width:56px">Option '+(i+1)+'</span>';
+        row.appendChild(fileControl({tr:tr,stage:'music',sampleIndex:i,cur:cur,warn:sel===i?REPLACE_WARN:'',removeWarn:REMOVE_WARN}));
         ab.appendChild(row);
       });
       var readyRow=document.createElement('div');readyRow.className='admin-row';
       readyRow.innerHTML='<label class="toggle-lbl"><input type="checkbox" data-ready '+(ready?'checked':'')+'> Ready for client to review</label>';
       ab.appendChild(readyRow);
       ab.querySelectorAll('[data-rec]').forEach(function(r){ r.addEventListener('change',function(){ if(r.checked) api('POST','/api/track/'+tr.id,{recommended:parseInt(r.getAttribute('data-rec'),10)}).then(reloadKeepOpen); }); });
-      ab.querySelectorAll('[data-up]').forEach(function(btn){
-        btn.addEventListener('click',function(){
-          var i=btn.getAttribute('data-up'), fi=ab.querySelector('[data-file="'+i+'"]');
-          if(!fi.files||!fi.files[0]) return;
-          btn.disabled=true;btn.textContent='Uploading…';
-          var fd=new FormData();fd.append('file',fi.files[0]);fd.append('trackId',tr.id);fd.append('stage','music');fd.append('sampleIndex',i);
-          fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){ if(j.error) throw j; reloadKeepOpen(); })
-            .catch(function(){ btn.disabled=false;btn.textContent='Upload'; alert('Upload failed'); });
-        });
-      });
       ab.querySelector('[data-ready]').addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{music:this.checked}).then(reloadKeepOpen); });
       el.appendChild(ab);
     }
@@ -1055,16 +1064,10 @@
     if(vr()==='admin'){
       var ab=document.createElement('div');ab.className='admin-box';
       ab.innerHTML='<div class="lbl">Admin — Final Production</div>'
-        +'<div class="admin-row"><input type="file" accept="audio/*" data-file><button class="mini-btn" data-up>Upload</button><span class="uling">'+(file?('current: '+esc(file)):'no file yet')+'</span></div>'
+        +'<div class="admin-row" data-file-row></div>'
         +'<div class="admin-row"><label class="toggle-lbl"><input type="checkbox" data-ready '+(ready?'checked':'')+'> Ready for client to review</label></div>';
-      var fileInput=ab.querySelector('[data-file]'), upBtn=ab.querySelector('[data-up]'), readyCb=ab.querySelector('[data-ready]');
-      upBtn.addEventListener('click',function(){
-        if(!fileInput.files||!fileInput.files[0]) return;
-        upBtn.disabled=true;upBtn.textContent='Uploading…';
-        var fd=new FormData();fd.append('file',fileInput.files[0]);fd.append('trackId',tr.id);fd.append('stage','final');
-        fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(){ reloadKeepOpen(); })
-          .catch(function(){ upBtn.disabled=false;upBtn.textContent='Upload'; alert('Upload failed'); });
-      });
+      ab.querySelector('[data-file-row]').appendChild(fileControl({tr:tr,stage:'final',cur:file,warn:(levels||wording)?REPLACE_WARN:'',removeWarn:REMOVE_WARN}));
+      var readyCb=ab.querySelector('[data-ready]');
       readyCb.addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{final:readyCb.checked}).then(reloadKeepOpen); });
       el.appendChild(ab);
     }

@@ -58,12 +58,22 @@ function newTrack(project, title, raw){
   return {
     id: uniqueId(project, title), title: String(title).slice(0,200),
     note: '', description:'',
-    raw: raw || 'received', cleaned:false, music:false, final:false, art:false,
+    raw: raw || 'none', cleaned:false, music:false, final:false, art:false,
     samples: ['','',''], recommended:0,
     audio: { raw:'', cleaned:'', music:'', final:'' }, cover:''
   };
 }
 function countPieces(project){ var n=0; eachTrack(project, function(){ n++; }); return n; }
+const RAW_STATUSES = ['none','received','accepted','rerecord'];   // none = no recording received yet
+// A replaced or removed file must be re-approved: clear the client's approval for that stage.
+function resetStageApprovals(project, trackId, stage, sampleIndex){
+  var a = project.approvals && project.approvals[trackId]; if(!a) return;
+  if(stage==='cleaned') a.cleanedApproved=false;
+  else if(stage==='art') a.artApproved=false;
+  else if(stage==='final'){ a.finalApproved=false; a.levelsApproved=false; a.wordingApproved=false; }
+  else if(stage==='music' && a.musicSelected===sampleIndex){ a.musicSelected=-1; a.musicSeen=false; }
+}
+function removeStoreFile(name){ if(name){ try{ fs.unlinkSync(path.join(AUDIO_DIR, path.basename(name))); }catch(e){} } }
 
 // ---------- multi-tenant lookups ----------
 function allProjects(){
@@ -311,7 +321,7 @@ app.post('/api/track/:id', requireAdmin, function(req,res){
   const proj=ctx.project, tr = findTrack(proj, req.params.id);
   if(!tr) return res.status(404).json({error:'no track'});
   const p = req.body||{};
-  ['raw'].forEach(function(k){ if(p[k]!=null) tr[k]=p[k]; });
+  if(p.raw!=null && RAW_STATUSES.indexOf(p.raw)>=0) tr.raw=p.raw;
   ['cleaned','music','final','art'].forEach(function(k){ if(p[k]!=null) tr[k]=!!p[k]; });
   if(p.title!=null) tr.title = String(p.title).slice(0,200);
   ['note'].forEach(function(k){ if(p[k]!=null) tr[k]=String(p[k]).slice(0,300); });
@@ -433,23 +443,50 @@ app.post('/api/upload', requireAuth, upload.single('file'), function(req,res){
   if(stage==='music'){ si=parseInt((req.body||{}).sampleIndex,10); if(!(si>=0&&si<=2)) si=0; }
   const finalName = proj.id+'-'+trackId+'-'+stage+(stage==='music'?si:'')+ext;   // namespaced so projects never collide
   const dest = path.join(AUDIO_DIR, finalName);
+  if(!tr.audio) tr.audio={};
+  if(!Array.isArray(tr.samples)) tr.samples=['','',''];
+  var prev = stage==='art' ? tr.cover : (stage==='music' ? tr.samples[si] : tr.audio[stage]);   // file being replaced, if any
   try{ if(fs.existsSync(dest)) fs.unlinkSync(dest); fs.renameSync(req.file.path, dest); }
   catch(e){ return res.status(500).json({error:'save failed'}); }
+  if(prev && prev!==finalName) removeStoreFile(prev);   // different extension: don't leave the old file orphaned
   if(stage==='art'){
     tr.cover = finalName; tr.art = true;
   }else if(stage==='music'){
-    if(!Array.isArray(tr.samples)) tr.samples=['','',''];
     tr.samples[si] = finalName;
-    if(!tr.audio) tr.audio={};
     tr.audio.music = tr.audio.music || finalName;   // keep a legacy single-file pointer
     tr.music = true;                                // ready once a sample lands (admin can untoggle)
   }else{
-    if(!tr.audio) tr.audio={};
     tr.audio[stage] = finalName;
-    if(stage==='raw'){ if(req.role==='client') tr.raw='received'; }
+    if(stage==='raw'){ tr.raw='received'; }         // a new recording (either side) needs a fresh quality check
     else { tr[stage] = true; }
   }
+  if(stage!=='raw') resetStageApprovals(proj, trackId, stage, si);
   saveData(DATA); res.json({ok:true, file:finalName, track:tr});
+});
+
+// admin: remove an uploaded file and take that stage back to "not ready"
+app.post('/api/upload-delete', requireAdmin, function(req,res){
+  const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
+  const proj=ctx.project, {trackId, stage} = req.body||{};
+  if(['raw','cleaned','music','final','art'].indexOf(stage)<0) return res.status(400).json({error:'bad stage'});
+  const tr = findTrack(proj, trackId);
+  if(!tr) return res.status(404).json({error:'no track'});
+  if(!tr.audio) tr.audio={};
+  if(!Array.isArray(tr.samples)) tr.samples=['','',''];
+  var si=-1, file='';
+  if(stage==='art'){ file=tr.cover; tr.cover=''; tr.art=false; }
+  else if(stage==='music'){
+    si=parseInt((req.body||{}).sampleIndex,10); if(!(si>=0&&si<=2)) return res.status(400).json({error:'bad sample'});
+    file=tr.samples[si]; tr.samples[si]='';
+    tr.audio.music = tr.samples.filter(Boolean)[0] || '';   // legacy single-file pointer follows what's left
+    if(!tr.audio.music) tr.music=false;
+  }else{
+    file=tr.audio[stage]; tr.audio[stage]='';
+    if(stage==='raw') tr.raw='none'; else tr[stage]=false;
+  }
+  removeStoreFile(file);
+  if(stage!=='raw') resetStageApprovals(proj, trackId, stage, si);
+  saveData(DATA); res.json({ok:true, track:tr});
 });
 
 // ---- audio + media (covers) — both served from the store dir ----
@@ -457,6 +494,7 @@ function serveStoreFile(req,res){
   const f = path.basename(req.params.file);
   const p = path.join(AUDIO_DIR, f);
   if(!fs.existsSync(p)) return res.status(404).end();
+  res.set('Cache-Control','no-cache');   // replaced files keep their name — always revalidate so a swap shows up straight away
   res.sendFile(p);
 }
 app.get('/audio/:file', serveStoreFile);
