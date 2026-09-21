@@ -177,6 +177,17 @@
   .mini-btn{font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--navy);background:var(--navy);color:#fff;padding:6px 12px;border-radius:8px}
   .mini-btn.ghost{background:#fff;color:var(--navy)}
   .mini-btn:disabled{opacity:.5;cursor:default}
+  .ui-overlay{position:fixed;inset:0;background:rgba(20,26,45,.45);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px}
+  .ui-dialog{background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(20,26,45,.28);max-width:440px;width:100%;padding:22px 24px}
+  .ui-title{font-family:'Fraunces',serif;font-size:19px;font-weight:600;color:var(--navy);margin-bottom:8px}
+  .ui-msg{font-size:13.5px;line-height:1.5;color:var(--ink);white-space:pre-line}
+  .ui-input{width:100%;margin-top:14px;font-family:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--line);border-radius:9px}
+  .ui-err{color:var(--alert);font-size:12px;min-height:16px;margin-top:6px}
+  .ui-btns{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+  .mini-btn.danger-fill{background:var(--alert);border-color:var(--alert);color:#fff}
+  .toasts{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);z-index:1100;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+  .toast{background:var(--navy);color:#fff;font-size:13px;padding:10px 16px;border-radius:10px;box-shadow:0 8px 24px rgba(20,26,45,.25);max-width:min(90vw,460px);transition:opacity .25s,transform .25s}
+  .toast.err{background:var(--alert)} .toast.ok{background:var(--done)} .toast.out{opacity:0;transform:translateY(6px)}
   .file-ctl{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
   label.mini-btn{display:inline-block}
   .mini-btn.off{opacity:.5;pointer-events:none}
@@ -344,6 +355,55 @@
   }
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];});}
   function slug(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');}
+
+  // ---- in-page dialogs + toasts (replace the browser's confirm / prompt / alert) ----
+  // uiDialog resolves { ok, value }. Esc cancels; Enter submits from the input; a typed-match input keeps the button off until it matches.
+  function uiDialog(o){
+    return new Promise(function(resolve){
+      var prevFocus=document.activeElement;
+      var ov=document.createElement('div');ov.className='ui-overlay';
+      var box=document.createElement('div');box.className='ui-dialog';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');
+      var h=document.createElement('div');h.className='ui-title';h.textContent=o.title||'Please confirm';box.appendChild(h);
+      var m=document.createElement('div');m.className='ui-msg';m.textContent=o.message||'';box.appendChild(m);
+      var inp=null, err=document.createElement('div');err.className='ui-err';
+      if(o.input){
+        inp=document.createElement('input');inp.className='ui-input';inp.type='text';inp.autocomplete='off';inp.placeholder=o.input.placeholder||'';
+        box.appendChild(inp);box.appendChild(err);
+      }
+      var row=document.createElement('div');row.className='ui-btns';
+      var cancel=document.createElement('button');cancel.type='button';cancel.className='mini-btn ghost';cancel.textContent=o.cancelLabel||'Cancel';
+      var ok=document.createElement('button');ok.type='button';ok.className='mini-btn'+(o.danger?' danger-fill':'');ok.textContent=o.okLabel||'OK';
+      if(!o.hideCancel) row.appendChild(cancel);
+      row.appendChild(ok);box.appendChild(row);ov.appendChild(box);document.body.appendChild(ov);
+      function typedOk(){ return !(o.input&&o.input.match) || inp.value.trim()===o.input.match; }
+      if(o.input&&o.input.match){ ok.disabled=true; inp.addEventListener('input',function(){ ok.disabled=!typedOk(); }); }
+      function done(res){ document.removeEventListener('keydown',onKey,true); ov.remove(); if(prevFocus&&prevFocus.focus){ try{ prevFocus.focus(); }catch(e){} } resolve(res); }
+      function submit(){
+        if(!typedOk()) return;
+        if(o.input&&o.input.validate){ var msg=o.input.validate(inp.value.trim()); if(msg){ err.textContent=msg; return; } }
+        done({ok:true,value:inp?inp.value.trim():''});
+      }
+      function onKey(e){
+        if(e.key==='Escape'){ e.preventDefault(); done({ok:false,value:''}); }
+        else if(e.key==='Enter' && inp && document.activeElement===inp){ e.preventDefault(); submit(); }
+      }
+      document.addEventListener('keydown',onKey,true);
+      ok.addEventListener('click',submit);
+      cancel.addEventListener('click',function(){ done({ok:false,value:''}); });
+      ov.addEventListener('mousedown',function(e){ if(e.target===ov) done({ok:false,value:''}); });
+      setTimeout(function(){ (inp || (o.danger&&!o.hideCancel ? cancel : ok)).focus(); },0);
+    });
+  }
+  function uiConfirm(message,o){ o=o||{}; return uiDialog({title:o.title,message:message,okLabel:o.okLabel,danger:o.danger}).then(function(r){ return r.ok; }); }
+  function uiTypeToConfirm(message,match,o){ o=o||{}; return uiDialog({title:o.title||'Delete permanently',message:message,okLabel:o.okLabel||'Delete',danger:true,input:{placeholder:'Type "'+match+'" to confirm',match:match}}).then(function(r){ return r.ok; }); }
+  function uiPrompt(message,o){ o=o||{}; return uiDialog({title:o.title,message:message,okLabel:o.okLabel||'Save',input:{placeholder:o.placeholder||'',validate:o.validate}}).then(function(r){ return r.ok?r.value:null; }); }
+  function toast(msg,kind){
+    var host=document.getElementById('toasts');
+    if(!host){ host=document.createElement('div');host.id='toasts';host.className='toasts';host.setAttribute('aria-live','polite');document.body.appendChild(host); }
+    var t=document.createElement('div');t.className='toast '+(kind||'');t.textContent=msg;host.appendChild(t);
+    setTimeout(function(){ t.classList.add('out'); setTimeout(function(){ t.remove(); },250); }, kind==='err'?6000:3200);
+  }
+  function errMsg(e,fallback){ return (e&&e.error)||fallback; }
 
   // ---- login
   var loginWrap=document.getElementById('loginWrap'),loginErr=document.getElementById('loginErr');
@@ -552,7 +612,7 @@
     var nm=document.createElement('input');nm.value=c.name;nm.placeholder='Client name';nm.style.cssText='font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;min-width:170px';
     var sv=document.createElement('button');sv.type='button';sv.className='mini-btn ghost';sv.textContent='Rename';
     sv.addEventListener('click',function(){ var v=nm.value.trim(); if(!v||v===c.name) return; sv.disabled=true;
-      api('POST','/api/client-update',{clientId:c.id,name:v}).then(reloadKeepOpen).catch(function(e){ sv.disabled=false; alert((e&&e.error)||'Rename failed'); }); });
+      api('POST','/api/client-update',{clientId:c.id,name:v}).then(reloadKeepOpen).catch(function(e){ sv.disabled=false; toast(errMsg(e,'Rename failed'),'err'); }); });
     row.appendChild(nm); row.appendChild(sv);
     var pick=document.createElement('label');pick.className='mini-btn ghost';pick.textContent=c.logo?'Replace logo':'Upload logo';
     var fi=document.createElement('input');fi.type='file';fi.accept='image/png,image/jpeg,image/webp,image/gif';fi.hidden=true;pick.appendChild(fi);
@@ -561,21 +621,26 @@
       pick.classList.add('off'); pick.firstChild.textContent='Uploading…';
       var fd=new FormData();fd.append('file',f);fd.append('clientId',c.id);
       fetch('/api/client-logo',{method:'POST',body:fd}).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw j; return j; }); }).then(reloadKeepOpen)
-        .catch(function(e){ pick.classList.remove('off'); pick.firstChild.textContent=c.logo?'Replace logo':'Upload logo'; fi.value=''; alert((e&&e.error)||'Logo upload failed'); });
+        .catch(function(e){ pick.classList.remove('off'); pick.firstChild.textContent=c.logo?'Replace logo':'Upload logo'; fi.value=''; toast(errMsg(e,'Logo upload failed'),'err'); });
     });
     row.appendChild(pick);
     var dc=document.createElement('button');dc.type='button';dc.className='mini-btn ghost danger';dc.textContent='Delete client';
     dc.addEventListener('click',function(){
       var n=(c.projects||[]).length, pieces=(c.projects||[]).reduce(function(a,p){ return a+(p.pieces||0); },0);
-      var typed=window.prompt('This permanently deletes the client "'+c.name+'": '+n+' project(s), '+pieces+' piece(s), their approvals, logo and every uploaded file. It cannot be undone.\n\nType the client name to confirm:');
-      if(typed==null) return;
-      if(typed.trim()!==c.name){ alert('That did not match the client name. Nothing was deleted.'); return; }
-      api('POST','/api/client-delete',{clientId:c.id}).then(function(){ FILTER='__clients__'; return reloadKeepOpen(); }).catch(function(e){ alert((e&&e.error)||'Delete failed'); });
+      uiTypeToConfirm('This permanently deletes the client "'+c.name+'": '+n+' project(s), '+pieces+' piece(s), their approvals, logo and every uploaded file. It cannot be undone.',c.name,{title:'Delete client',okLabel:'Delete client'}).then(function(ok){
+        if(!ok) return;
+        api('POST','/api/client-delete',{clientId:c.id}).then(function(){ FILTER='__clients__'; toast('Client deleted','ok'); return reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Delete failed'),'err'); });
+      });
     });
     row.appendChild(dc);
     if(c.logo){
       var rm=document.createElement('button');rm.type='button';rm.className='mini-btn ghost danger';rm.textContent='Remove logo';
-      rm.addEventListener('click',function(){ if(!confirm('Remove the logo for '+c.name+'?')) return; api('POST','/api/client-logo-delete',{clientId:c.id}).then(reloadKeepOpen).catch(function(){ alert('Remove failed'); }); });
+      rm.addEventListener('click',function(){
+        uiConfirm('Remove the logo for '+c.name+'?',{title:'Remove logo',okLabel:'Remove',danger:true}).then(function(ok){
+          if(!ok) return;
+          api('POST','/api/client-logo-delete',{clientId:c.id}).then(reloadKeepOpen).catch(function(){ toast('Remove failed','err'); });
+        });
+      });
       row.appendChild(rm);
     }
     return row;
@@ -625,10 +690,11 @@
     });
     wrap.querySelectorAll('[data-code]').forEach(function(btn){
       btn.addEventListener('click',function(){
-        var code=window.prompt('Set the client access code for this project (min 4 characters):');
-        if(code==null) return; code=code.trim();
-        if(code.length<4){ alert('Code must be at least 4 characters.'); return; }
-        api('POST','/api/project-set-code',{projectId:btn.getAttribute('data-code'),code:code}).then(reloadKeepOpen).catch(function(e){ alert((e&&e.error)||'Failed'); });
+        uiPrompt('Set the client access code for this project. Share it with the client; you can change it any time.',{title:'Set client access code',okLabel:'Set code',placeholder:'Access code (min 4 characters)',
+          validate:function(v){ return v.length<4?'Code must be at least 4 characters.':''; }}).then(function(code){
+          if(code==null) return;
+          api('POST','/api/project-set-code',{projectId:btn.getAttribute('data-code'),code:code}).then(function(){ toast('Access code updated','ok'); return reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Failed'),'err'); });
+        });
       });
     });
     // edit a project inline (name, intro, produced by, header line). Payment link stays in Project settings for the active project.
@@ -648,7 +714,7 @@
         box.querySelector('[data-close]').addEventListener('click',function(){ box.style.display='none'; });
         box.querySelector('[data-save]').addEventListener('click',function(){
           if(!f('name').trim()){ box.querySelector('[data-f="name"]').focus(); return; }
-          api('POST','/api/project-update',{projectId:id,name:f('name').trim(),preparedBy:f('prep').trim(),subtitle:f('sub').trim(),intro:f('intro')}).then(reloadKeepOpen).catch(function(e){ alert((e&&e.error)||'Save failed'); });
+          api('POST','/api/project-update',{projectId:id,name:f('name').trim(),preparedBy:f('prep').trim(),subtitle:f('sub').trim(),intro:f('intro')}).then(function(){ toast('Project saved','ok'); return reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Save failed'),'err'); });
         });
       });
     });
@@ -656,10 +722,10 @@
     wrap.querySelectorAll('[data-del]').forEach(function(btn){
       btn.addEventListener('click',function(){
         var id=btn.getAttribute('data-del'), p=PROJ[id];
-        var typed=window.prompt('This permanently deletes the project "'+p.name+'": '+p.pieces+' piece(s), their approvals and every uploaded file. It cannot be undone.\n\nType the project name to confirm:');
-        if(typed==null) return;
-        if(typed.trim()!==p.name){ alert('That did not match the project name. Nothing was deleted.'); return; }
-        api('POST','/api/project-delete',{projectId:id}).then(function(){ FILTER='__clients__'; return reloadKeepOpen(); }).catch(function(e){ alert((e&&e.error)||'Delete failed'); });
+        uiTypeToConfirm('This permanently deletes the project "'+p.name+'": '+p.pieces+' piece(s), their approvals and every uploaded file. It cannot be undone.',p.name,{title:'Delete project',okLabel:'Delete project'}).then(function(ok){
+          if(!ok) return;
+          api('POST','/api/project-delete',{projectId:id}).then(function(){ FILTER='__clients__'; toast('Project deleted','ok'); return reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Delete failed'),'err'); });
+        });
       });
     });
   }
@@ -754,20 +820,25 @@
     if(PREVIEW){ fi.disabled=true; pick.classList.add('off'); pick.title='Read-only preview'; }
     fi.addEventListener('change',function(){
       var f=fi.files&&fi.files[0]; if(!f) return;
-      if(cur && o.warn && !confirm(o.warn)){ fi.value=''; return; }
-      pick.classList.add('off'); state.textContent='Uploading…';
-      var fd=new FormData();fd.append('file',f);fd.append('trackId',tr.id);fd.append('stage',o.stage);
-      if(o.sampleIndex!=null) fd.append('sampleIndex',o.sampleIndex);
-      fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){ if(j.error) throw j; reloadKeepOpen(); })
-        .catch(function(){ pick.classList.remove('off'); state.textContent=cur||'no file yet'; fi.value=''; alert('Upload failed'); });
+      function go(){
+        pick.classList.add('off'); state.textContent='Uploading…';
+        var fd=new FormData();fd.append('file',f);fd.append('trackId',tr.id);fd.append('stage',o.stage);
+        if(o.sampleIndex!=null) fd.append('sampleIndex',o.sampleIndex);
+        fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){ if(j.error) throw j; reloadKeepOpen(); })
+          .catch(function(){ pick.classList.remove('off'); state.textContent=cur||'no file yet'; fi.value=''; toast('Upload failed','err'); });
+      }
+      if(cur && o.warn) uiConfirm(o.warn,{title:'Replace file',okLabel:'Replace',danger:true}).then(function(ok){ if(ok) go(); else fi.value=''; });
+      else go();
     });
     if(cur && vr()==='admin' && !PREVIEW){
       var rm=document.createElement('button');rm.type='button';rm.className='mini-btn ghost danger';rm.textContent='Remove';
       rm.addEventListener('click',function(){
-        if(!confirm('Remove this file?'+(o.removeWarn?' '+o.removeWarn:''))) return;
-        rm.disabled=true;
-        var body={trackId:tr.id,stage:o.stage}; if(o.sampleIndex!=null) body.sampleIndex=o.sampleIndex;
-        api('POST','/api/upload-delete',body).then(reloadKeepOpen).catch(function(){ rm.disabled=false; alert('Remove failed'); });
+        uiConfirm('This file will be deleted.'+(o.removeWarn?' '+o.removeWarn:''),{title:'Remove file',okLabel:'Remove',danger:true}).then(function(ok){
+          if(!ok) return;
+          rm.disabled=true;
+          var body={trackId:tr.id,stage:o.stage}; if(o.sampleIndex!=null) body.sampleIndex=o.sampleIndex;
+          api('POST','/api/upload-delete',body).then(reloadKeepOpen).catch(function(){ rm.disabled=false; toast('Remove failed','err'); });
+        });
       });
       box.appendChild(rm);
     }
@@ -794,7 +865,7 @@
     });
     return w;
   }
-  var REPLACE_WARN='The client has already approved this. Replacing it clears their approval so they review the new file. Continue?';
+  var REPLACE_WARN='The client has already approved this. Replacing it clears their approval so they review the new file.';
   var REMOVE_WARN='This also clears any client approval and takes the stage back to not ready.';
   function addCollectionControl(){
     var wrap=document.createElement('div');wrap.className='admin-add';
@@ -830,7 +901,9 @@
       api('POST','/api/track/'+tr.id,{ title:box.querySelector('.title').value.trim()||tr.title, description:box.querySelector('[data-desc]').value.trim(), note:box.querySelector('[data-note]').value.trim() }).then(reloadKeepOpen);
     });
     box.querySelector('[data-del]').addEventListener('click',function(){
-      if(confirm('Remove "'+tr.title+'"? This deletes the piece and any uploaded audio for it.')) api('POST','/api/track-delete',{id:tr.id}).then(function(){ openIds[tr.id]=0; reloadKeepOpen(); });
+      uiConfirm('This deletes "'+tr.title+'" and any audio uploaded for it. It cannot be undone.',{title:'Remove piece',okLabel:'Remove piece',danger:true}).then(function(ok){
+        if(ok) api('POST','/api/track-delete',{id:tr.id}).then(function(){ openIds[tr.id]=0; reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Remove failed'),'err'); });
+      });
     });
     return box;
   }
@@ -907,7 +980,7 @@
     var rawBox=document.createElement('div');rawBox.className='upload-box';
     rawBox.innerHTML='<div class="ulbl">'+esc(vr()==='client' ? (tr.raw==='rerecord'?'Re-record and upload':'Upload your recording') : "Raw recording (upload on client's behalf)")+'</div>';
     rawBox.appendChild(fileControl({tr:tr,stage:'raw',cur:tr.audio&&tr.audio.raw,label:vr()==='client'?'Upload recording':'Upload file',
-      warn:tr.raw==='accepted'?'This recording is already approved. Replacing it puts it back to "Received" for a fresh check. Continue?':'',
+      warn:tr.raw==='accepted'?'This recording is already approved. Replacing it puts it back to "Received" for a fresh check.':'',
       removeWarn:'The vocal status goes back to Not received.'}));
     s1.appendChild(rawBox);
     if(vr()==='admin'){
@@ -1157,7 +1230,7 @@
             var md={}; mf.querySelectorAll('[data-m]').forEach(function(inp){ md[inp.getAttribute('data-m')]=inp.value.trim(); });
             var btn=mf.querySelector('[data-msave]'); btn.disabled=true; btn.textContent='Saving…';
             api('POST','/api/metadata',{trackId:tr.id,metadata:md}).then(function(){ a.metadata=md; btn.textContent='Saved ✓'; setTimeout(function(){ btn.disabled=false; btn.textContent='Save metadata'; },1600); })
-              .catch(function(){ btn.disabled=false; btn.textContent='Save metadata'; alert('Save failed'); });
+              .catch(function(){ btn.disabled=false; btn.textContent='Save metadata'; toast('Save failed','err'); });
           });
         } else {
           dual.querySelectorAll('button').forEach(function(b){ b.disabled=true; });
@@ -1218,7 +1291,7 @@
     if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function(){flash(btn,method);},function(){fb(text,btn,method);}); else fb(text,btn,method);
   });
   function flash(btn,m){var o=btn.textContent;btn.textContent='Copied ✓ — paste into '+m;btn.classList.add('done');setTimeout(function(){btn.textContent=o;btn.classList.remove('done');},2600);}
-  function fb(text,btn,m){var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');flash(btn,m);}catch(e){alert(text);}document.body.removeChild(ta);}
+  function fb(text,btn,m){var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');flash(btn,m);}catch(e){uiDialog({title:'Copy this text',message:text,okLabel:'Done',hideCancel:true});}document.body.removeChild(ta);}
 
   // ---- start: check session
   api('GET','/api/me').then(function(m){ if(m.role) boot(); else { loginWrap.style.display='flex'; } })
