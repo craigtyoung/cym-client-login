@@ -64,6 +64,21 @@ function newTrack(project, title, raw){
   };
 }
 function countPieces(project){ var n=0; eachTrack(project, function(){ n++; }); return n; }
+// per-project numbers for the admin home (same definitions as the per-project dashboard)
+function projectStats(project){
+  var s={ total:0, complete:0, toReview:0, rerecord:0, awaitingClient:0, changes:0 }, A=project.approvals||{};
+  eachTrack(project, function(tr){
+    var a=A[tr.id]||{}; s.total++;
+    if(a.finalApproved) s.complete++;
+    if(tr.raw==='received') s.toReview++;
+    if(tr.raw==='rerecord') s.rerecord++;
+    if(tr.cleaned && !a.cleanedApproved) s.awaitingClient++;
+    if(tr.final && !a.finalApproved) s.awaitingClient++;
+    if(tr.art && !a.artApproved) s.awaitingClient++;
+    ['cleaned','music','final','art'].forEach(function(k){ if(a[k+'Note']) s.changes++; });
+  });
+  return s;
+}
 const RAW_STATUSES = ['none','received','accepted','rerecord'];   // none = no recording received yet
 // A replaced or removed file must be re-approved: clear the client's approval for that stage.
 function resetStageApprovals(project, trackId, stage, sampleIndex){
@@ -264,7 +279,7 @@ app.get('/api/data', requireAuth, function(req,res){
   const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
   const proj=ctx.project, client=ctx.client;
   const out={ role:req.role, brand:DATA.brand,
-    client:{ name:client.name, logo:client.logo||'' },
+    client:{ id:client.id, name:client.name, logo:client.logo||'' },
     project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', payUrl:proj.payUrl||'', payLabel:proj.payLabel||'' },
     contact: client.contact || {method:'WhatsApp'},
     categories: proj.categories, approvals: proj.approvals };
@@ -272,7 +287,7 @@ app.get('/api/data', requireAuth, function(req,res){
     out.activeProjectId=proj.id;
     out.clients=DATA.clients.map(function(c){
       return { id:c.id, name:c.name, logo:c.logo||'', contact:c.contact||{},
-        projects:c.projects.map(function(p){ return { id:p.id, name:p.name, intro:p.intro, preparedBy:p.preparedBy||'', subtitle:p.subtitle||'', hasCode:!!(p.auth&&p.auth.clientHash), pieces:countPieces(p) }; }) };
+        projects:c.projects.map(function(p){ return { id:p.id, name:p.name, intro:p.intro, preparedBy:p.preparedBy||'', subtitle:p.subtitle||'', hasCode:!!(p.auth&&p.auth.clientHash), pieces:countPieces(p), stats:projectStats(p) }; }) };
     });
   }
   res.json(out);

@@ -188,6 +188,35 @@
   .toasts{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);z-index:1100;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
   .toast{background:var(--navy);color:#fff;font-size:13px;padding:10px 16px;border-radius:10px;box-shadow:0 8px 24px rgba(20,26,45,.25);max-width:min(90vw,460px);transition:opacity .25s,transform .25s}
   .toast.err{background:var(--alert)} .toast.ok{background:var(--done)} .toast.out{opacity:0;transform:translateY(6px)}
+  /* admin home (client list) + per-client workspace chrome */
+  .global-view .intro-band, .global-view .pipe-legend, .global-view .bar{display:none}
+  .crumbs{align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;color:var(--muted)}
+  .crumb-back{font-family:inherit;font-size:13px;font-weight:600;color:var(--navy);background:#fff;border:1px solid var(--line);border-radius:9px;padding:6px 12px;cursor:pointer}
+  .crumb-back:hover{background:var(--bg)}
+  .crumb-client{font-weight:600;color:var(--ink)}
+  .crumb-proj{font-family:inherit;font-size:12px;font-weight:600;color:var(--muted);background:none;border:1px solid var(--line);border-radius:20px;padding:4px 11px;cursor:pointer}
+  .crumb-proj.on{color:var(--navy);background:var(--bg);border-color:var(--gold)}
+  .home-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+  .home-title{font-family:'Fraunces',serif;font-size:27px;font-weight:600;color:var(--navy)}
+  .home-sub{font-size:13px;color:var(--muted);margin-top:4px}
+  .home-add{margin-bottom:18px}
+  .client-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+  .client-card{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:18px 18px 14px;display:flex;flex-direction:column;gap:12px}
+  .cc-top{display:flex;align-items:center;gap:12px}
+  .cc-avatar{width:48px;height:48px;border-radius:11px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:20px;font-weight:600;flex:none;overflow:hidden}
+  .cc-avatar img{width:100%;height:100%;object-fit:contain;background:#fff}
+  .cc-name{font-size:16px;font-weight:600;color:var(--ink)}
+  .cc-meta{font-size:12px;color:var(--muted);margin-top:2px}
+  .cc-projects{display:flex;flex-direction:column;gap:6px}
+  .cc-proj{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;font-family:inherit;font-size:13px;color:var(--ink);background:var(--bg);border:1px solid transparent;border-radius:9px;padding:8px 11px;cursor:pointer}
+  .cc-proj:hover{border-color:var(--gold)}
+  .cc-mini{font-size:11px;color:var(--muted);white-space:nowrap}
+  .cc-chips{display:flex;gap:6px;flex-wrap:wrap}
+  .cc-chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px}
+  .cc-chip.await{color:var(--await);background:var(--await-bg)} .cc-chip.note{color:var(--navy);background:var(--lock-bg)}
+  .cc-chip.alert{color:var(--alert);background:var(--alert-bg)} .cc-chip.done{color:var(--done);background:var(--done-bg)} .cc-chip.quiet{color:var(--muted);background:var(--lock-bg)}
+  .cc-actions{display:flex;gap:8px;margin-top:auto}
+  .cc-empty{font-size:12.5px;color:var(--muted)}
   .file-ctl{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
   label.mini-btn{display:inline-block}
   .mini-btn.off{opacity:.5;pointer-events:none}
@@ -312,6 +341,7 @@
       </aside>
 
       <main class="main">
+        <div class="crumbs" id="crumbs" style="display:none"></div>
         <div class="intro-band" id="introBand">
           <img class="ib-logo" id="ibLogo" alt="" style="display:none" />
           <div class="ib-text">
@@ -419,6 +449,7 @@
   function boot(){
     api('GET','/api/data').then(function(data){
       D=data; ROLE=data.role;
+      if(ROLE==='admin') FILTER='__home__';   // admins land on the client list
       loginWrap.style.display='none';
       document.getElementById('app').style.display='block';
       initChrome(); render(); refreshBar();
@@ -502,7 +533,21 @@
     nav.innerHTML=''; host.innerHTML='';
     var isAdmin = vr()==='admin';
     var special = (SPECIAL[FILTER] && (isAdmin || FILTER==='__account__')) ? SPECIAL[FILTER] : null;
+    // Admin "global" views (client list, manage clients, account) sit above any one client: no client header, no per-client nav.
+    var isGlobal = isAdmin && (FILTER==='__home__' || FILTER==='__clients__' || FILTER==='__account__');
+    syncContext(isGlobal);
+    if(isGlobal){
+      addNavLabel('Clients');
+      addNav('All clients','__home__',false);
+      addNav('Manage clients','__clients__',false);
+      addNavLabel('Account');
+      addNav('Account & security','__account__',false);
+      special();
+      return;
+    }
     if(isAdmin){
+      var back=document.createElement('button');back.className='nav-item';back.innerHTML='← All clients';
+      back.addEventListener('click',goHome);nav.appendChild(back);
       addNavLabel('Workspace');
       addNav('Dashboard','__dash__',false);
       addNav('Production queue','__queue__',false);
@@ -556,7 +601,6 @@
     });
     if(isAdmin){
       addNavLabel('Manage');
-      addNav('Clients','__clients__',false);
       addNav('Billing','__billing__',false);
       addNav('Settings','__settings__',false);
       addNav('Account & security','__account__',false);
@@ -569,8 +613,115 @@
 
   function addNavLabel(text){ var d=document.createElement('div');d.className='nav-sec-label';d.textContent=text;nav.appendChild(d); }
 
+  // ---- admin: client list home + per-client workspace ----
+  function goHome(){ FILTER='__home__'; PREVIEW=false; syncViewChrome(); render(); window.scrollTo({top:0,behavior:'smooth'}); }
+  function openProject(pid){
+    return api('POST','/api/project-select',{projectId:pid}).then(function(){ FILTER='__all__'; PREVIEW=false; syncViewChrome(); return reloadKeepOpen(); })
+      .then(function(){ window.scrollTo({top:0,behavior:'smooth'}); }).catch(function(e){ toast(errMsg(e,'Could not open that project'),'err'); });
+  }
+  function newProjectFor(c){
+    return uiPrompt('Name the new project for '+c.name+'. Each project is its own portal with its own access code, pieces and approvals.',{title:'New project',okLabel:'Create project',placeholder:'e.g. The Spiritual Sanctuary',
+      validate:function(v){ return v?'':'Enter a project name.'; }}).then(function(name){
+      if(name==null) return;
+      return api('POST','/api/project-add',{clientId:c.id,name:name}).then(function(){ FILTER='__all__'; return reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Could not create the project'),'err'); });
+    });
+  }
+  // sidebar context + breadcrumb: client-facing details only appear once you are inside a client
+  function syncContext(global){
+    var real=ROLE==='admin';
+    document.body.classList.toggle('global-view',!!global);
+    var vt=document.getElementById('viewToggle'); vt.style.display=(real&&!global)?'inline-block':'none';
+    var prep=document.querySelector('.side-prepared'), sc=document.getElementById('sideClient'), sp=document.getElementById('sideProj'), cr=document.getElementById('crumbs');
+    if(global){ prep.textContent='Craig Young Music'; sc.textContent='Client portal'; sp.textContent=''; cr.style.display='none'; return; }
+    prep.textContent='Prepared for'; sc.textContent=D.client.name; sp.textContent=D.project.name;
+    if(!(real && !PREVIEW)){ cr.style.display='none'; return; }
+    cr.innerHTML='';cr.style.display='flex';
+    var back=document.createElement('button');back.className='crumb-back';back.textContent='← All clients';back.addEventListener('click',goHome);cr.appendChild(back);
+    var cn=document.createElement('span');cn.className='crumb-client';cn.textContent=D.client.name;cr.appendChild(cn);
+    var mine=(D.clients||[]).filter(function(c){ return c.id===D.client.id; })[0];
+    if(mine && mine.projects.length>1){
+      mine.projects.forEach(function(p){
+        var b=document.createElement('button');b.className='crumb-proj'+(p.id===D.project.id?' on':'');b.textContent=p.name;
+        if(p.id!==D.project.id) b.addEventListener('click',function(){ openProject(p.id); });
+        cr.appendChild(b);
+      });
+    }
+  }
+  function renderHome(){
+    var clients=D.clients||[], wrap=document.createElement('div');
+    var totals={clients:clients.length,projects:0,pieces:0,needYou:0};
+    clients.forEach(function(c){ c.projects.forEach(function(p){ var s=p.stats||{}; totals.projects++; totals.pieces+=(p.pieces||0); totals.needYou+=(s.toReview||0)+(s.changes||0); }); });
+    var head=document.createElement('div');head.className='home-head';
+    head.innerHTML='<div><div class="home-title">Your clients</div><div class="home-sub">'
+      +(clients.length?(totals.clients+' client'+(totals.clients===1?'':'s')+' · '+totals.projects+' project'+(totals.projects===1?'':'s')+' · '+totals.pieces+' pieces'+(totals.needYou?' · <b style="color:var(--await)">'+totals.needYou+' need you</b>':'')):'No clients yet')
+      +'</div></div><button class="mini-btn" id="hmAdd">+ Add client</button>';
+    wrap.appendChild(head);
+    var form=document.createElement('div');form.className='dash-sec home-add';form.style.display='none';
+    form.innerHTML='<h3>New client</h3><div class="sec-note">Creates the client and, if you name one, their first project (their own portal, access code and approvals).</div>'
+      +'<div class="acct-form"><input id="hmName" placeholder="Client name" /><input id="hmProj" placeholder="First project name (optional)" style="min-width:250px" />'
+      +'<button class="mini-btn" id="hmCreate">Create</button><button class="mini-btn ghost" id="hmCancel">Cancel</button></div>';
+    wrap.appendChild(form);
+    var grid=document.createElement('div');grid.className='client-grid';
+    if(!clients.length){ var em=document.createElement('div');em.className='dash-sec cc-empty';em.textContent='Add your first client to set up their portal.';wrap.appendChild(em); }
+    clients.forEach(function(c){
+      var agg={total:0,complete:0,toReview:0,rerecord:0,awaitingClient:0,changes:0};
+      c.projects.forEach(function(p){ var s=p.stats||{}; Object.keys(agg).forEach(function(k){ agg[k]+=(s[k]||0); }); });
+      var card=document.createElement('div');card.className='client-card';
+      var av=document.createElement('div');av.className='cc-avatar';
+      if(c.logo){ var im=document.createElement('img');im.src='media/'+encodeURIComponent(c.logo);im.alt='';av.appendChild(im); } else av.textContent=(c.name||'?').trim().charAt(0).toUpperCase();
+      var top=document.createElement('div');top.className='cc-top';top.appendChild(av);
+      var tt=document.createElement('div');
+      tt.innerHTML='<div class="cc-name">'+esc(c.name)+'</div><div class="cc-meta">'+c.projects.length+' project'+(c.projects.length===1?'':'s')+' · '+agg.total+' pieces</div>';
+      top.appendChild(tt);card.appendChild(top);
+      var pl=document.createElement('div');pl.className='cc-projects';
+      if(!c.projects.length){ pl.innerHTML='<div class="cc-empty">No projects yet.</div>'; }
+      c.projects.forEach(function(p){
+        var s=p.stats||{}, bits=[];
+        if(s.toReview) bits.push(s.toReview+' to approve'); if(s.changes) bits.push(s.changes+' note'+(s.changes===1?'':'s'));
+        var b=document.createElement('button');b.type='button';b.className='cc-proj';
+        b.innerHTML='<span>'+esc(p.name)+'</span><span class="cc-mini">'+(bits.length?esc(bits.join(' · ')):(s.total?s.complete+'/'+s.total+' complete':'empty'))+'</span>';
+        b.addEventListener('click',function(){ openProject(p.id); });
+        pl.appendChild(b);
+      });
+      card.appendChild(pl);
+      var chips=document.createElement('div');chips.className='cc-chips';
+      function chip(cls,txt){ var s=document.createElement('span');s.className='cc-chip '+cls;s.textContent=txt;chips.appendChild(s); }
+      if(agg.toReview) chip('await',agg.toReview+' to approve');
+      if(agg.changes) chip('note',agg.changes+' client note'+(agg.changes===1?'':'s'));
+      if(agg.rerecord) chip('alert',agg.rerecord+' re-record');
+      if(agg.awaitingClient) chip('quiet',agg.awaitingClient+' awaiting client');
+      if(agg.total) chip(agg.complete===agg.total?'done':'quiet',agg.complete+'/'+agg.total+' complete');
+      if(!chips.children.length) chip('quiet','all quiet');
+      card.appendChild(chips);
+      var act=document.createElement('div');act.className='cc-actions';
+      var open=document.createElement('button');open.type='button';open.className='mini-btn';open.textContent='Open';
+      open.addEventListener('click',function(){ if(c.projects.length) openProject(c.projects[0].id); else newProjectFor(c); });
+      var add=document.createElement('button');add.type='button';add.className='mini-btn ghost';add.textContent='+ Project';
+      add.addEventListener('click',function(){ newProjectFor(c); });
+      var man=document.createElement('button');man.type='button';man.className='mini-btn ghost';man.textContent='Manage';
+      man.addEventListener('click',function(){ FILTER='__clients__'; render(); window.scrollTo({top:0,behavior:'smooth'}); });
+      act.appendChild(open);act.appendChild(add);act.appendChild(man);card.appendChild(act);
+      grid.appendChild(card);
+    });
+    wrap.appendChild(grid);host.appendChild(wrap);
+    var hn=document.getElementById('hmName'), hp=document.getElementById('hmProj');
+    document.getElementById('hmAdd').addEventListener('click',function(){ form.style.display='block'; hn.focus(); });
+    document.getElementById('hmCancel').addEventListener('click',function(){ form.style.display='none'; });
+    function create(){
+      var n=hn.value.trim(), pn=hp.value.trim(); if(!n){ hn.focus(); return; }
+      var btn=document.getElementById('hmCreate'); btn.disabled=true;
+      api('POST','/api/client-add',{name:n}).then(function(r){
+        if(!pn){ toast('Client added. Open it and add a project to get started.','ok'); return reloadKeepOpen(); }
+        return api('POST','/api/project-add',{clientId:r.id,name:pn}).then(function(){ FILTER='__all__'; toast('Client and project created','ok'); return reloadKeepOpen(); });
+      }).catch(function(e){ btn.disabled=false; toast(errMsg(e,'Could not create the client'),'err'); });
+    }
+    document.getElementById('hmCreate').addEventListener('click',create);
+    [hn,hp].forEach(function(i){ i.addEventListener('keydown',function(e){ if(e.key==='Enter') create(); }); });
+  }
+
   // special (non-catalogue) views. Placeholders are the framework to build into.
   var SPECIAL = {
+    '__home__': renderHome,
     '__dash__': renderDashboard,
     '__queue__': function(){ placeholder('Production queue','A pipeline view across every piece — what’s in raw, cleaning, music, final and artwork, and what’s next in line to produce.'); },
     '__approvals__': function(){ placeholder('Approvals & notes','Every client approval and change request in one running list, filterable by piece and stage.'); },
