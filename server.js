@@ -232,6 +232,7 @@ function sessionOf(req){ const sid=parseCookies(req).sid; return sid && sessions
 function roleOf(req){ const s=sessionOf(req); return s?s.role:null; }
 function requireAuth(req,res,next){ const s=sessionOf(req); if(!s) return res.status(401).json({error:'not logged in'}); req.role=s.role; req.session=s; next(); }
 function requireAdmin(req,res,next){ const s=sessionOf(req); if(!s||s.role!=='admin') return res.status(403).json({error:'admin only'}); req.role='admin'; req.session=s; next(); }
+function requireClient(req,res,next){ const s=sessionOf(req); if(!s||s.role!=='client') return res.status(403).json({error:'client only'}); req.role='client'; req.session=s; next(); }
 // self-service access codes (hashed). Env ADMIN_CODE/CLIENT_CODE always work as a recovery fallback.
 function hashCode(code){ const salt=crypto.randomBytes(16).toString('hex'); return salt+':'+crypto.scryptSync(String(code),salt,32).toString('hex'); }
 function verifyCode(code, stored){
@@ -295,10 +296,11 @@ app.get('/api/data', requireAuth, function(req,res){
     project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', art:proj.art||'', metaDefaults:proj.metaDefaults||{}, payUrl:proj.payUrl||'', payLabel:proj.payLabel||'' },
     contact: client.contact || {method:'WhatsApp'},
     categories: proj.categories, approvals: proj.approvals };
+  if(req.role==='client') out.proposals = client.proposals || [];   // a client only ever sees their own proposals
   if(req.role==='admin'){
     out.activeProjectId=proj.id;
     out.clients=DATA.clients.map(function(c){
-      return { id:c.id, name:c.name, logo:c.logo||'', contact:c.contact||{},
+      return { id:c.id, name:c.name, logo:c.logo||'', proposals:c.proposals||[], contact:c.contact||{},
         projects:c.projects.map(function(p){ return { id:p.id, name:p.name, intro:p.intro, preparedBy:p.preparedBy||'', subtitle:p.subtitle||'', art:p.art||'', hasCode:!!(p.auth&&p.auth.clientHash), pieces:countPieces(p), stats:projectStats(p) }; }) };
     });
   }
@@ -348,6 +350,64 @@ app.post('/api/metadata', requireAuth, function(req,res){
   a.metadata = { title:s(m.title,200), artist:s(m.artist,200), album:s(m.album,200), genre:s(m.genre,80), year:s(m.year,10) };
   if(confirm) a.detailsConfirmed = !!a.metadata.title;   // "Confirm details" (client, or admin filling in on their behalf); a title is required
   saveData(DATA); res.json({ok:true, metadata:a.metadata, detailsConfirmed:!!a.detailsConfirmed});
+});
+
+// ---- project proposals + quotes (per client): requested → quoted → accepted | declined → converted (a real project) ----
+// A quote must carry a price AND written terms, and the client's acceptance is recorded with a timestamp, so nothing is agreed without both in writing.
+function findProposal(id){
+  var out=null;
+  (DATA.clients||[]).forEach(function(c){ (c.proposals||[]).forEach(function(p){ if(p.id===id) out={client:c, proposal:p}; }); });
+  return out;
+}
+const PROPOSAL_STATUSES=['requested','quoted','accepted','declined','converted'];
+app.post('/api/proposal-add', requireClient, function(req,res){
+  const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
+  const b=req.body||{}, sv=function(v,n){ return String(v==null?'':v).trim().slice(0,n); };
+  const title=sv(b.title,140); if(!title) return res.status(400).json({error:'Give the project a name'});
+  const description=sv(b.description,2000); if(!description) return res.status(400).json({error:'Describe what you have in mind'});
+  const c=ctx.client; if(!Array.isArray(c.proposals)) c.proposals=[];
+  if(c.proposals.filter(function(p){ return p.status==='requested'; }).length>=10) return res.status(429).json({error:'You already have several requests waiting. Please wait for a quote first.'});
+  const p={ id:'prop-'+crypto.randomBytes(4).toString('hex'), title:title, description:description, recordings:sv(b.recordings,50), timeline:sv(b.timeline,100),
+    status:'requested', createdAt:new Date().toISOString(), fromProject:ctx.project.id };
+  c.proposals.unshift(p); saveData(DATA); res.json({ok:true, proposal:p});
+});
+app.post('/api/proposal-respond', requireClient, function(req,res){
+  const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
+  const {id, action, note}=req.body||{};
+  const p=(ctx.client.proposals||[]).filter(function(x){ return x.id===id; })[0];
+  if(!p) return res.status(404).json({error:'no proposal'});
+  if(p.status!=='quoted') return res.status(409).json({error:'There is no quote to respond to'});
+  if(action==='accept'){ p.status='accepted'; p.acceptedAt=new Date().toISOString(); p.acceptedBy=ctx.client.name; }
+  else if(action==='decline'){ p.status='declined'; p.declinedAt=new Date().toISOString(); }
+  else return res.status(400).json({error:'bad action'});
+  if(note) p.responseNote=String(note).trim().slice(0,1000);
+  saveData(DATA); res.json({ok:true, proposal:p});
+});
+app.post('/api/proposal-quote', requireAdmin, function(req,res){
+  const {id, price, includes, terms, validUntil}=req.body||{};
+  const f=findProposal(id); if(!f) return res.status(404).json({error:'no proposal'});
+  if(f.proposal.status!=='requested' && f.proposal.status!=='quoted') return res.status(409).json({error:'This proposal can no longer be quoted'});
+  const sv=function(v,n){ return String(v==null?'':v).trim().slice(0,n); };
+  const q={ price:sv(price,120), includes:sv(includes,2000), terms:sv(terms,2000), validUntil:sv(validUntil,40), quotedAt:new Date().toISOString() };
+  if(!q.price) return res.status(400).json({error:'A quote needs a price'});
+  if(!q.terms) return res.status(400).json({error:'A quote needs written terms'});
+  f.proposal.quote=q; f.proposal.status='quoted';
+  delete f.proposal.responseNote; delete f.proposal.declinedAt;
+  saveData(DATA); res.json({ok:true, proposal:f.proposal});
+});
+app.post('/api/proposal-create-project', requireAdmin, function(req,res){
+  const f=findProposal((req.body||{}).id); if(!f) return res.status(404).json({error:'no proposal'});
+  if(f.proposal.status!=='accepted') return res.status(409).json({error:'Create the project once the client has accepted the quote'});
+  const id=uniqueProjectId(f.proposal.title);
+  f.client.projects.push({ id:id, name:f.proposal.title, intro:f.proposal.description.slice(0,2000), preparedBy:'Craig Young', auth:{}, categories:[], approvals:{} });
+  f.proposal.status='converted'; f.proposal.projectId=id; f.proposal.convertedAt=new Date().toISOString();
+  if(req.session) req.session.projectId=id;
+  saveData(DATA); res.json({ok:true, projectId:id});
+});
+app.post('/api/proposal-delete', requireAdmin, function(req,res){
+  const f=findProposal((req.body||{}).id); if(!f) return res.status(404).json({error:'no proposal'});
+  f.client.proposals=f.client.proposals.filter(function(p){ return p!==f.proposal; });
+  saveData(DATA); res.json({ok:true});
 });
 
 // ---- admin: piece edits (operate on the active project) ----
@@ -586,6 +646,32 @@ app.post('/api/upload', requireAuth, upload.single('file'), function(req,res){
   }
   if(stage!=='raw') resetStageApprovals(proj, trackId, stage, si);
   saveData(DATA); res.json({ok:true, file:finalName, track:tr});
+});
+
+// A client (or the admin) sends in a brand-new recording: creates the recording as Received (awaiting the admin's quality check) and stores the audio in one step.
+const AUDIO_EXT=['.mp3','.wav','.m4a','.aac','.flac','.ogg','.oga','.aif','.aiff','.webm','.caf'];
+app.post('/api/submit-recording', requireAuth, function(req,res,next){ upload.single('file')(req,res,function(err){ if(err) return res.status(400).json({error: err.code==='LIMIT_FILE_SIZE'?'That file is too large (120 MB max)':'Upload failed'}); next(); }); }, function(req,res){
+  const cleanup=function(){ if(req.file){ try{ fs.unlinkSync(req.file.path); }catch(e){} } };
+  const ctx=currentContext(req); if(!ctx){ cleanup(); return res.status(404).json({error:'no project'}); }
+  const proj=ctx.project, b=req.body||{};
+  const title=String(b.title||'').trim().slice(0,200);
+  if(!title){ cleanup(); return res.status(400).json({error:'Give the recording a title'}); }
+  if(!req.file) return res.status(400).json({error:'Choose an audio file to send'});
+  const ext=path.extname(req.file.originalname||'').toLowerCase();
+  if(AUDIO_EXT.indexOf(ext)<0){ cleanup(); return res.status(400).json({error:'Please send an audio file (MP3, WAV, M4A, AAC, FLAC or OGG)'}); }
+  const g=String(b.group==null?'':b.group);
+  let list;
+  if(g==='' || g==='none') list=implicitCategory(proj).tracks;
+  else{ const m=/^(\d+):(\d*)$/.exec(g); list=m?listAt(proj, parseInt(m[1],10), m[2]===''?null:parseInt(m[2],10)):null; }
+  if(!list){ cleanup(); return res.status(400).json({error:'That group was not found'}); }
+  const tr=newTrack(proj, title, 'received');
+  if(req.role==='client') tr.fromClient=true;
+  if(b.note && String(b.note).trim()) tr.note=('From client: '+String(b.note).trim()).slice(0,300);
+  const finalName=proj.id+'-'+tr.id+'-raw'+ext;
+  try{ fs.renameSync(req.file.path, path.join(AUDIO_DIR, finalName)); }
+  catch(e){ cleanup(); return res.status(500).json({error:'save failed'}); }
+  tr.audio.raw=finalName; list.push(tr);
+  saveData(DATA); res.json({ok:true, track:tr});
 });
 
 // admin: remove an uploaded file and take that stage back to "not ready"

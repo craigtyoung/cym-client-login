@@ -107,6 +107,20 @@
   .row{display:flex;align-items:center;gap:16px;padding:13px 16px;cursor:pointer}
   .row:hover{background:#fbfbfd}
   .track.complete .row{background:var(--done-bg)}
+  .prop-card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;box-shadow:var(--shadow)}
+  .prop-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+  .prop-title{font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:var(--navy)}
+  .prop-meta{font-size:12px;color:var(--muted);margin-top:3px}
+  .prop-desc{font-size:13.5px;line-height:1.5;color:var(--ink);margin:6px 0}
+  .prop-quote{margin-top:10px;background:#fbf7ec;border-left:3px solid var(--gold);border-radius:8px;padding:11px 14px;font-size:13px;line-height:1.5}
+  .prop-quote .pn-lbl{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:4px}
+  .prop-price{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:6px}
+  .prop-q-lbl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-top:8px}
+  .prop-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .prop-form{display:flex;flex-direction:column;gap:8px;max-width:560px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line-soft)}
+  .prop-form input,.prop-form textarea{font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:9px}
+  .prop-form textarea{min-height:76px;resize:vertical}
+  .prop-h{font-family:'Fraunces',serif;font-size:18px;color:var(--navy);margin:8px 0 12px}
   .r-thumb{width:48px;height:48px;border-radius:9px;object-fit:cover;flex:none;background:#f0f1f6;box-shadow:0 1px 5px rgba(20,26,45,.16);margin-right:-4px}
   .r-thumb-empty{display:flex;align-items:center;justify-content:center;color:#b9bfd0;font-size:19px;box-shadow:none;border:1px dashed var(--line);background:#fafbfd}
   .r-main{flex:1;min-width:0}
@@ -558,13 +572,15 @@
   function render(){
     nav.innerHTML=''; host.innerHTML='';
     var isAdmin = vr()==='admin';
-    var special = (SPECIAL[FILTER] && (isAdmin || FILTER==='__account__')) ? SPECIAL[FILTER] : null;
-    // Admin "global" views (client list, manage clients, account) sit above any one client: no client header, no per-client nav.
-    var isGlobal = isAdmin && (FILTER==='__home__' || FILTER==='__clients__' || FILTER==='__account__');
+    var special = (SPECIAL[FILTER] && (isAdmin || FILTER==='__account__' || FILTER==='__propose__')) ? SPECIAL[FILTER] : null;
+    // Admin "global" views (client list, proposals, manage clients, account) sit above any one client: no client header, no per-client nav.
+    var isGlobal = isAdmin && (FILTER==='__home__' || FILTER==='__clients__' || FILTER==='__account__' || FILTER==='__proposals__');
     syncContext(isGlobal);
     if(isGlobal){
       addNavLabel('Clients');
       addNav('All clients','__home__',false);
+      var openProps=0; (D.clients||[]).forEach(function(c){ (c.proposals||[]).forEach(function(p){ if(p.status==='requested'||p.status==='accepted') openProps++; }); });
+      addNav('Proposals','__proposals__',false,openProps||null);
       addNav('Manage clients','__clients__',false);
       addNavLabel('Account');
       addNav('Account & security','__account__',false);
@@ -593,6 +609,7 @@
     } else if(!special && isAdmin){
       host.appendChild(topAddBar());   // top of the page, where you look for it
     }
+    if(!special && !isAdmin) host.appendChild(clientSendBar());   // clients can send in a brand-new recording
     D.categories.forEach(function(cat, ci){
       var sec=document.createElement('section');sec.className='category';
       if(special) sec.style.display='none';
@@ -651,6 +668,9 @@
       addNav('Settings','__settings__',false);
       addNav('Account & security','__account__',false);
     }else{
+      addNavLabel('Proposals');
+      var waitingQuotes=myProposals().filter(function(p){ return p.status==='quoted'; }).length;
+      addNav('Propose a project','__propose__',false,waitingQuotes||null);
       addNavLabel('Account');
       addNav('Account & security','__account__',false);
     }
@@ -708,10 +728,177 @@
       });
     }
   }
+  // ---- client: send a brand-new recording ----
+  function clientSendBar(){
+    var wrap=document.createElement('div');wrap.className='admin-add client-send';
+    var btn=document.createElement('button');btn.className='add-btn';btn.textContent='+ Send a new recording';wrap.appendChild(btn);
+    if(PREVIEW){ btn.disabled=true; btn.title='Read-only preview'; return wrap; }
+    btn.addEventListener('click',function(){
+      if(wrap.querySelector('.add-form')) return;
+      var groupOpts=groupOptionsHtml().replace('>No group<','>Not sure yet<');
+      var form=document.createElement('div');form.className='add-form';
+      form.innerHTML='<div style="flex:1 1 320px;display:flex;flex-direction:column;gap:8px">'
+        +'<input class="title" placeholder="Recording title" />'
+        +(groupOpts?'<label class="uling" style="display:flex;flex-direction:column;gap:4px">Where does it belong?<select class="grp">'+groupOpts+'</select></label>':'')
+        +'<textarea class="note-in" rows="2" placeholder="Anything you would like me to know (optional)" style="width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;resize:vertical"></textarea>'
+        +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><label class="mini-btn ghost">Choose audio file<input type="file" accept="audio/*,.m4a,.mp3,.wav,.aac,.flac,.ogg" hidden></label><span class="uling" data-chosen>No file chosen</span></div></div>'
+        +'<button class="mini-btn" data-send>Send recording</button><button class="mini-btn ghost" data-cancel>Cancel</button>'
+        +'<div class="uling" style="flex-basis:100%">MP3, WAV, M4A, AAC, FLAC or OGG, up to 120 MB. It goes straight to '+esc(D.project.preparedBy||'your producer')+' for a quality check.</div>';
+      wrap.appendChild(form);
+      var ti=form.querySelector('.title'), fi=form.querySelector('input[type=file]'), chosen=form.querySelector('[data-chosen]'), send=form.querySelector('[data-send]');
+      ti.focus();
+      fi.addEventListener('change',function(){ var f=fi.files&&fi.files[0]; chosen.textContent=f?f.name:'No file chosen'; if(f && !ti.value.trim()) ti.value=f.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').trim(); });
+      form.querySelector('[data-cancel]').addEventListener('click',function(){ form.remove(); });
+      send.addEventListener('click',function(){
+        var f=fi.files&&fi.files[0], t=ti.value.trim();
+        if(!t){ ti.focus(); toast('Give the recording a title','err'); return; }
+        if(!f){ toast('Choose an audio file to send','err'); return; }
+        var fd=new FormData();fd.append('file',f);fd.append('title',t);fd.append('note',form.querySelector('.note-in').value.trim());
+        var sel=form.querySelector('select.grp'); fd.append('group',sel?sel.value:'none');
+        send.disabled=true; send.textContent='Sending…';
+        fetch('/api/submit-recording',{method:'POST',body:fd}).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw j; return j; }); })
+          .then(function(){ toast('Recording sent. Thank you.','ok'); return reloadKeepOpen(); })
+          .catch(function(e){ send.disabled=false; send.textContent='Send recording'; toast(errMsg(e,'Could not send the recording'),'err'); });
+      });
+    });
+    return wrap;
+  }
+
+  // ---- proposals + quotes ----
+  function myProposals(){ return D.proposals || ((D.clients||[]).filter(function(c){ return D.client && c.id===D.client.id; })[0]||{}).proposals || []; }
+  var PROP_LABEL={
+    client:{requested:['Waiting for your quote','quiet'],quoted:['Quote ready to review','await'],accepted:['You accepted the quote','done'],declined:['Declined','quiet'],converted:['Project set up','done']},
+    admin:{requested:['Quote requested','await'],quoted:['Quote sent, waiting on the client','quiet'],accepted:['Accepted, create the project','await'],declined:['Declined by the client','alert'],converted:['Project created','done']}
+  };
+  function fmtDate(iso){ try{ return new Date(iso).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }catch(e){ return ''; } }
+  function proposalCard(p,who,clientName){
+    var lab=(PROP_LABEL[who]||{})[p.status]||[p.status,'quiet'];
+    var el=document.createElement('div');el.className='prop-card';el.setAttribute('data-prop',p.id);
+    var h='<div class="prop-head"><div><div class="prop-title">'+esc(p.title)+'</div><div class="prop-meta">'+(clientName?esc(clientName)+' · ':'')+'Requested '+esc(fmtDate(p.createdAt))+'</div></div><span class="cc-chip '+lab[1]+'">'+esc(lab[0])+'</span></div>';
+    h+='<div class="prop-desc">'+esc(p.description).replace(/\n/g,'<br>')+'</div>';
+    var bits=[]; if(p.recordings) bits.push('About '+esc(p.recordings)+' recording(s)'); if(p.timeline) bits.push('Timeline: '+esc(p.timeline));
+    if(bits.length) h+='<div class="prop-meta">'+bits.join(' · ')+'</div>';
+    if(p.quote){
+      h+='<div class="prop-quote"><div class="pn-lbl">Quote</div><div class="prop-price">'+esc(p.quote.price)+'</div>'
+        +(p.quote.includes?'<div class="prop-q-lbl">What is included</div><div>'+esc(p.quote.includes).replace(/\n/g,'<br>')+'</div>':'')
+        +'<div class="prop-q-lbl">Terms</div><div>'+esc(p.quote.terms).replace(/\n/g,'<br>')+'</div>'
+        +(p.quote.validUntil?'<div class="prop-meta" style="margin-top:6px">Valid until '+esc(p.quote.validUntil)+'</div>':'')+'</div>';
+    }
+    if(p.acceptedAt) h+='<div class="prop-meta" style="margin-top:8px">Accepted '+esc(fmtDate(p.acceptedAt))+(p.acceptedBy?' by '+esc(p.acceptedBy):'')+'</div>';
+    if(p.responseNote) h+='<div class="client-note-view"><b>Note:</b> '+esc(p.responseNote)+'</div>';
+    el.innerHTML=h; return el;
+  }
+  // client page: propose a project + see quotes
+  function renderPropose(){
+    var wrap=document.createElement('div');
+    var form=document.createElement('div');form.className='dash-sec';
+    form.innerHTML='<h3>Propose a new project</h3><div class="sec-note">Tell me what you have in mind and I will send you a quote. Nothing is agreed until you accept the quote.</div>'
+      +'<div class="acct-form" style="flex-direction:column;align-items:stretch;max-width:560px">'
+      +'<input id="prTitle" placeholder="Project name, for example My Morning Meditations" />'
+      +'<textarea id="prDesc" placeholder="What would you like made? Themes, length, who it is for, anything that helps." style="font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;min-height:100px;resize:vertical"></textarea>'
+      +'<input id="prRec" placeholder="About how many recordings? (optional)" />'
+      +'<input id="prTime" placeholder="When would you like it? (optional)" />'
+      +'<div><button class="mini-btn" id="prSend">Request a quote</button></div></div>';
+    wrap.appendChild(form);
+    var send=form.querySelector('#prSend');
+    if(PREVIEW){ form.querySelectorAll('input,textarea,button').forEach(function(x){ x.disabled=true; }); }
+    else send.addEventListener('click',function(){
+      var t=form.querySelector('#prTitle').value.trim(), d=form.querySelector('#prDesc').value.trim();
+      if(!t){ form.querySelector('#prTitle').focus(); toast('Give the project a name','err'); return; }
+      if(!d){ form.querySelector('#prDesc').focus(); toast('Describe what you have in mind','err'); return; }
+      send.disabled=true;
+      api('POST','/api/proposal-add',{title:t,description:d,recordings:form.querySelector('#prRec').value.trim(),timeline:form.querySelector('#prTime').value.trim()})
+        .then(function(){ toast('Request sent. I will send you a quote.','ok'); return reloadKeepOpen(); })
+        .catch(function(e){ send.disabled=false; toast(errMsg(e,'Could not send the request'),'err'); });
+    });
+    var list=document.createElement('div');
+    var props=myProposals();
+    list.innerHTML='<h3 class="prop-h">Your proposals</h3>';
+    if(!props.length) list.insertAdjacentHTML('beforeend','<div class="dash-sec cc-empty">No proposals yet.</div>');
+    props.forEach(function(p){
+      var card=proposalCard(p,'client');
+      if(p.status==='quoted' && !PREVIEW){
+        var act=document.createElement('div');act.className='prop-actions';
+        var acc=document.createElement('button');acc.className='mini-btn';acc.textContent='Accept quote';
+        var dec=document.createElement('button');dec.className='mini-btn ghost';dec.textContent='Decline';
+        acc.addEventListener('click',function(){
+          uiConfirm('Accepting confirms you agree to the price and terms above for "'+p.title+'".',{title:'Accept quote',okLabel:'Accept quote'}).then(function(ok){
+            if(!ok) return;
+            api('POST','/api/proposal-respond',{id:p.id,action:'accept'}).then(function(){ toast('Quote accepted. Thank you.','ok'); return reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Could not accept'),'err'); });
+          });
+        });
+        dec.addEventListener('click',function(){
+          uiPrompt('Decline this quote? You can add a note if you like (optional).',{title:'Decline quote',okLabel:'Decline',placeholder:'Optional note'}).then(function(note){
+            if(note==null) return;
+            api('POST','/api/proposal-respond',{id:p.id,action:'decline',note:note}).then(function(){ toast('Quote declined','ok'); return reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Could not decline'),'err'); });
+          });
+        });
+        act.appendChild(acc);act.appendChild(dec);card.appendChild(act);
+      }
+      if(p.status==='converted') card.insertAdjacentHTML('beforeend','<div class="prop-meta" style="margin-top:8px">Your new project is set up. I will send you its access code.</div>');
+      list.appendChild(card);
+    });
+    wrap.appendChild(list);
+    host.appendChild(wrap);
+  }
+  // admin page: every client's proposals, the ones needing you first
+  function renderProposalsAdmin(){
+    var wrap=document.createElement('div');
+    var all=[]; (D.clients||[]).forEach(function(c){ (c.proposals||[]).forEach(function(p){ all.push({c:c,p:p}); }); });
+    var rank={requested:0,accepted:1,quoted:2,declined:3,converted:4};
+    all.sort(function(x,y){ return (rank[x.p.status]-rank[y.p.status]) || String(y.p.createdAt).localeCompare(String(x.p.createdAt)); });
+    var needs=all.filter(function(x){ return x.p.status==='requested'||x.p.status==='accepted'; }).length;
+    var head=document.createElement('div');head.className='home-head';
+    head.innerHTML='<div><div class="home-title">Proposals</div><div class="home-sub">'+(all.length?(all.length+' proposal'+(all.length===1?'':'s')+(needs?' · <b style="color:var(--await)">'+needs+' need you</b>':'')):'Nothing yet')+'</div></div>';
+    wrap.appendChild(head);
+    if(!all.length) wrap.insertAdjacentHTML('beforeend','<div class="dash-sec cc-empty">No proposals yet. When a client proposes a project it will show up here, and you write the quote.</div>');
+    all.forEach(function(x){ wrap.appendChild(adminProposal(x.p,x.c)); });
+    host.appendChild(wrap);
+  }
+  function adminProposal(p,c){
+    var card=proposalCard(p,'admin',c.name), act=document.createElement('div');act.className='prop-actions';
+    function del(){
+      var b=document.createElement('button');b.className='mini-btn ghost danger';b.textContent='Delete';
+      b.addEventListener('click',function(){ uiConfirm('Delete the proposal "'+p.title+'"?',{title:'Delete proposal',okLabel:'Delete',danger:true}).then(function(ok){ if(!ok) return; api('POST','/api/proposal-delete',{id:p.id}).then(reloadKeepOpen).catch(function(){ toast('Delete failed','err'); }); }); });
+      return b;
+    }
+    if(p.status==='requested'||p.status==='quoted'){
+      var q=p.quote||{}, savedTerms='';
+      try{ savedTerms=localStorage.getItem('cym_quote_terms')||''; }catch(e){}
+      var f=document.createElement('div');f.className='prop-form';
+      f.innerHTML='<div class="lbl" style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700">'+(p.status==='quoted'?'Edit the quote':'Write the quote')+'</div>'
+        +'<input data-q="price" placeholder="Price, for example $400 USD per recording" value="'+esc(q.price||'')+'" />'
+        +'<textarea data-q="includes" placeholder="What is included (optional)">'+esc(q.includes||'')+'</textarea>'
+        +'<textarea data-q="terms" placeholder="Terms, in writing: payment, revisions, delivery, usage. Required.">'+esc(q.terms||savedTerms)+'</textarea>'
+        +'<input data-q="validUntil" placeholder="Valid until (optional), for example Oct 31 2026" value="'+esc(q.validUntil||'')+'" />'
+        +'<div><button class="mini-btn" data-sendq>'+(p.status==='quoted'?'Update quote':'Send quote')+'</button></div>';
+      f.querySelector('[data-sendq]').addEventListener('click',function(){
+        function v(k){ return f.querySelector('[data-q="'+k+'"]').value.trim(); }
+        if(!v('price')){ f.querySelector('[data-q="price"]').focus(); toast('A quote needs a price','err'); return; }
+        if(!v('terms')){ f.querySelector('[data-q="terms"]').focus(); toast('A quote needs written terms','err'); return; }
+        var b=this; b.disabled=true;
+        api('POST','/api/proposal-quote',{id:p.id,price:v('price'),includes:v('includes'),terms:v('terms'),validUntil:v('validUntil')})
+          .then(function(){ try{ localStorage.setItem('cym_quote_terms',v('terms')); }catch(e){} toast('Quote saved. The client can see it now.','ok'); return reloadKeepOpen(); })
+          .catch(function(e){ b.disabled=false; toast(errMsg(e,'Could not save the quote'),'err'); });
+      });
+      card.appendChild(f);
+    }
+    if(p.status==='accepted'){
+      var mk=document.createElement('button');mk.className='mini-btn';mk.textContent='Create the project';
+      mk.addEventListener('click',function(){ mk.disabled=true; api('POST','/api/proposal-create-project',{id:p.id}).then(function(){ FILTER='__all__'; toast('Project created. Set its access code in Manage clients.','ok'); return reloadKeepOpen(); }).catch(function(e){ mk.disabled=false; toast(errMsg(e,'Could not create the project'),'err'); }); });
+      act.appendChild(mk);
+    }
+    if(p.status==='converted' && p.projectId){
+      var op=document.createElement('button');op.className='mini-btn ghost';op.textContent='Open project';
+      op.addEventListener('click',function(){ openProject(p.projectId); }); act.appendChild(op);
+    }
+    act.appendChild(del()); card.appendChild(act);
+    return card;
+  }
   function renderHome(){
     var clients=D.clients||[], wrap=document.createElement('div');
     var totals={clients:clients.length,projects:0,pieces:0,needYou:0};
-    clients.forEach(function(c){ c.projects.forEach(function(p){ var s=p.stats||{}; totals.projects++; totals.pieces+=(p.pieces||0); totals.needYou+=(s.toReview||0)+(s.changes||0)+(s.readyForFinal||0); }); });
+    clients.forEach(function(c){ c.projects.forEach(function(p){ var s=p.stats||{}; totals.projects++; totals.pieces+=(p.pieces||0); totals.needYou+=(s.toReview||0)+(s.changes||0)+(s.readyForFinal||0); }); (c.proposals||[]).forEach(function(p){ if(p.status==='requested'||p.status==='accepted') totals.needYou++; }); });
     var head=document.createElement('div');head.className='home-head';
     head.innerHTML='<div><div class="home-title">Your clients</div><div class="home-sub">'
       +(clients.length?(totals.clients+' client'+(totals.clients===1?'':'s')+' · '+totals.projects+' project'+(totals.projects===1?'':'s')+' · '+totals.pieces+' recordings'+(totals.needYou?' · <b style="color:var(--await)">'+totals.needYou+' need you</b>':'')):'No clients yet')
@@ -749,6 +936,9 @@
       function chip(cls,txt){ var s=document.createElement('span');s.className='cc-chip '+cls;s.textContent=txt;chips.appendChild(s); }
       if(agg.toReview) chip('await',agg.toReview+' to approve');
       if(agg.readyForFinal) chip('await',agg.readyForFinal+' ready for final');
+      var pReq=(c.proposals||[]).filter(function(p){ return p.status==='requested'; }).length, pAcc=(c.proposals||[]).filter(function(p){ return p.status==='accepted'; }).length;
+      if(pReq) chip('await',pReq+' quote request'+(pReq===1?'':'s'));
+      if(pAcc) chip('await',pAcc+' accepted, create project');
       if(agg.changes) chip('note',agg.changes+' client note'+(agg.changes===1?'':'s'));
       if(agg.rerecord) chip('alert',agg.rerecord+' re-record');
       if(agg.awaitingClient) chip('quiet',agg.awaitingClient+' awaiting client');
@@ -784,6 +974,8 @@
   // special (non-catalogue) views. Placeholders are the framework to build into.
   var SPECIAL = {
     '__home__': renderHome,
+    '__proposals__': renderProposalsAdmin,
+    '__propose__': renderPropose,
     '__dash__': renderDashboard,
     '__queue__': function(){ placeholder('Production queue','A pipeline view across every recording — what’s in raw, cleaning, music, final and artwork, and what’s next in line to produce.'); },
     '__approvals__': function(){ placeholder('Approvals & notes','Every client approval and change request in one running list, filterable by recording and stage.'); },
@@ -1018,7 +1210,7 @@
       var tr=x.t, a=appr(tr.id), loc=x.sub?x.cat+' / '+x.sub:x.cat;
       if(a.finalApproved) finalApproved++;
       if(a.artApproved) coversApproved++;
-      if(tr.raw==='received'){ rawToAccept++; attention.push({tag:'To approve',cls:'await',title:tr.title,sub:loc+'  ·  raw recording is in — approve the quality to send it into production'}); }
+      if(tr.raw==='received'){ rawToAccept++; attention.push({tag:tr.fromClient?'New from client':'To approve',cls:'await',title:tr.title,sub:loc+(tr.fromClient?'  ·  sent in by the client — listen and approve the quality to send it into production':'  ·  raw recording is in — approve the quality to send it into production')}); }
       if(tr.raw==='rerecord') attention.push({tag:'Re-record',cls:'alert',title:tr.title,sub:loc+'  ·  flagged for re-record'});
       if(tr.cleaned && !a.cleanedApproved) awaitingClient++;
       if(tr.cleaned && !detailsDone(a)) awaitingClient++;
@@ -1202,6 +1394,7 @@
   function trackEl(tr){
     var wrap=document.createElement('div');wrap.className='track'+(appr(tr.id).finalApproved?' complete':'')+(openIds[tr.id]?' open':'');
     var st=steps(tr), lab=statusLabel(tr);
+    if(vr()==='admin' && tr.fromClient && tr.raw==='received') lab=['New from client · to review','await'];   // the client sent this in themselves
     if(vr()==='admin' && readyForFinal(tr)) lab=['Ready to produce final','await'];   // your cue: vocal approved, music chosen, details in
     function stepHtml(cls,label,num,tip){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
     // Vocal tooltip must reflect the real state — never claim a recording is in / approved when it isn't.
