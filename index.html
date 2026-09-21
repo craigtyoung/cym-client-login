@@ -356,7 +356,7 @@
           </div>
         </div>
         <div class="pipe-legend">
-          <div class="flow"><span title="Your raw recording is in. Craig confirms it's good to produce, or flags a re-record.">Vocal Received</span><span class="arrow">→</span><span title="Craig's cleaned, produced version of your vocal. Approve it or request a change.">Produced Vocal</span><span class="arrow">→</span><span title="Your vocal set to music — pick the option you love.">Music Samples</span><span class="arrow">→</span><span title="Your cover artwork — upload your own or approve the studio-created design.">Cover Art</span><span class="arrow">→</span><span title="The finished master. Approve it and complete your purchase.">Final</span></div>
+          <div class="flow"><span title="Your raw recording is in. Craig confirms it's good to produce, or flags a re-record.">Vocal Received</span><span class="arrow">→</span><span title="Craig's cleaned, produced version of your vocal. Approve it or request a change.">Produced Vocal</span><span class="arrow">→</span><span title="Your vocal set to music — pick the option you love.">Music Samples</span><span class="arrow">→</span><span title="Confirm the title, artist, album, genre and year that go into your finished file.">Track Details</span><span class="arrow">→</span><span title="Your cover artwork — upload your own or approve the studio-created design.">Cover Art</span><span class="arrow">→</span><span title="The finished master. Approve it and complete your purchase.">Final</span></div>
           <div class="keys">
             <span><i class="kdot await"></i> Awaiting client</span>
             <span><i class="kdot done"></i> Approved</span>
@@ -505,6 +505,15 @@
 
   // ---- model helpers
   function appr(id){ return D.approvals[id] || {}; }
+  // Track Details: done once the client confirmed them (or, for older data, once a title was saved)
+  function detailsDone(a){ return !!(a && (a.detailsConfirmed || (a.metadata && a.metadata.title))); }
+  // everything the final master depends on is in: vocal approved, music chosen, details confirmed (and not already produced)
+  function readyForFinal(tr){ var a=appr(tr.id); return !!(a.cleanedApproved && a.musicSeen && detailsDone(a) && !tr.final); }
+  // what the details form starts with: the saved values, else the recording title + project defaults
+  function detailsStart(tr){
+    var m=appr(tr.id).metadata||{}, d=(D.project&&D.project.metaDefaults)||{};
+    return { title:m.title||tr.title, artist:m.artist||d.artist||D.client.name||'', album:m.album||d.album||D.project.name||'', genre:m.genre||d.genre||'', year:m.year||d.year||String(new Date().getFullYear()) };
+  }
   function eachCat(fn){ D.categories.forEach(fn); }
   function catTracks(cat){ return cat.subcategories?cat.subcategories.reduce(function(a,s){return a.concat(s.tracks);},[]):cat.tracks; }
   function allTracks(){ var out=[]; eachCat(function(cat){ if(cat.subcategories) cat.subcategories.forEach(function(s){ s.tracks.forEach(function(t){out.push({t:t,cat:cat.name,sub:s.name});}); }); else cat.tracks.forEach(function(t){out.push({t:t,cat:cat.name,sub:null});}); }); return out; }
@@ -515,6 +524,7 @@
       raw: tr.raw==='rerecord'?'alert':(tr.raw==='accepted'?'done':'neutral'),
       cleaned: !tr.cleaned?'lock':(a.cleanedApproved?'done':'await'),
       music: !tr.music?'lock':(a.musicSeen?'done':'await'),
+      details: !tr.cleaned?'lock':(detailsDone(a)?'done':'await'),
       final: !tr.final?'lock':(a.finalApproved?'done':'await'),
       art: !tr.art?'lock':(a.artApproved?'done':'await')
     };
@@ -689,7 +699,7 @@
   function renderHome(){
     var clients=D.clients||[], wrap=document.createElement('div');
     var totals={clients:clients.length,projects:0,pieces:0,needYou:0};
-    clients.forEach(function(c){ c.projects.forEach(function(p){ var s=p.stats||{}; totals.projects++; totals.pieces+=(p.pieces||0); totals.needYou+=(s.toReview||0)+(s.changes||0); }); });
+    clients.forEach(function(c){ c.projects.forEach(function(p){ var s=p.stats||{}; totals.projects++; totals.pieces+=(p.pieces||0); totals.needYou+=(s.toReview||0)+(s.changes||0)+(s.readyForFinal||0); }); });
     var head=document.createElement('div');head.className='home-head';
     head.innerHTML='<div><div class="home-title">Your clients</div><div class="home-sub">'
       +(clients.length?(totals.clients+' client'+(totals.clients===1?'':'s')+' · '+totals.projects+' project'+(totals.projects===1?'':'s')+' · '+totals.pieces+' recordings'+(totals.needYou?' · <b style="color:var(--await)">'+totals.needYou+' need you</b>':'')):'No clients yet')
@@ -703,7 +713,7 @@
     var grid=document.createElement('div');grid.className='client-grid';
     if(!clients.length){ var em=document.createElement('div');em.className='dash-sec cc-empty';em.textContent='Add your first client to set up their portal.';wrap.appendChild(em); }
     clients.forEach(function(c){
-      var agg={total:0,complete:0,toReview:0,rerecord:0,awaitingClient:0,changes:0};
+      var agg={total:0,complete:0,toReview:0,rerecord:0,awaitingClient:0,changes:0,readyForFinal:0};
       c.projects.forEach(function(p){ var s=p.stats||{}; Object.keys(agg).forEach(function(k){ agg[k]+=(s[k]||0); }); });
       var card=document.createElement('div');card.className='client-card';
       var av=document.createElement('div');av.className='cc-avatar';
@@ -716,7 +726,7 @@
       if(!c.projects.length){ pl.innerHTML='<div class="cc-empty">No projects yet.</div>'; }
       c.projects.forEach(function(p){
         var s=p.stats||{}, bits=[];
-        if(s.toReview) bits.push(s.toReview+' to approve'); if(s.changes) bits.push(s.changes+' note'+(s.changes===1?'':'s'));
+        if(s.toReview) bits.push(s.toReview+' to approve'); if(s.readyForFinal) bits.push(s.readyForFinal+' ready for final'); if(s.changes) bits.push(s.changes+' note'+(s.changes===1?'':'s'));
         var b=document.createElement('button');b.type='button';b.className='cc-proj';
         b.innerHTML='<span>'+esc(p.name)+'</span><span class="cc-mini">'+(bits.length?esc(bits.join(' · ')):(s.total?s.complete+'/'+s.total+' complete':'empty'))+'</span>';
         b.addEventListener('click',function(){ openProject(p.id); });
@@ -726,6 +736,7 @@
       var chips=document.createElement('div');chips.className='cc-chips';
       function chip(cls,txt){ var s=document.createElement('span');s.className='cc-chip '+cls;s.textContent=txt;chips.appendChild(s); }
       if(agg.toReview) chip('await',agg.toReview+' to approve');
+      if(agg.readyForFinal) chip('await',agg.readyForFinal+' ready for final');
       if(agg.changes) chip('note',agg.changes+' client note'+(agg.changes===1?'':'s'));
       if(agg.rerecord) chip('alert',agg.rerecord+' re-record');
       if(agg.awaitingClient) chip('quiet',agg.awaitingClient+' awaiting client');
@@ -929,6 +940,12 @@
       +'<input id="stPrep" placeholder="Produced by" value="'+esc(D.project.preparedBy||'')+'" />'
       +'<input id="stSub" placeholder="Header line (blank = &quot;Prepared for '+esc(D.client.name)+' · produced by '+esc(D.project.preparedBy||'Craig Young')+'&quot;)" value="'+esc(D.project.subtitle||'')+'" />'
       +'<textarea id="stIntro" placeholder="Client intro" style="font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;min-height:90px;resize:vertical">'+esc(D.project.intro||'')+'</textarea>'
+      +'<div class="lbl" style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-top:6px">Track details defaults (pre-filled for the client)</div>'
+      +'<div class="sec-note" style="margin:0">Each recording&rsquo;s Track Details start with these, so the client only confirms. Title comes from the recording name. Blank artist / album fall back to the client and project name.</div>'
+      +'<input id="stMdArtist" placeholder="Artist" value="'+esc((D.project.metaDefaults||{}).artist||'')+'" />'
+      +'<input id="stMdAlbum" placeholder="Album / collection" value="'+esc((D.project.metaDefaults||{}).album||'')+'" />'
+      +'<input id="stMdGenre" placeholder="Genre" value="'+esc((D.project.metaDefaults||{}).genre||'')+'" />'
+      +'<input id="stMdYear" placeholder="Year" value="'+esc((D.project.metaDefaults||{}).year||'')+'" />'
       +'<div class="lbl" style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-top:6px">Payment (Approve &amp; Pay button)</div>'
       +'<input id="stPayUrl" placeholder="Stripe payment link (https://buy.stripe.com/...)" value="'+esc(D.project.payUrl||'')+'" />'
       +'<input id="stPayLabel" placeholder="Price label shown to client (e.g. $400 USD · Preferred Client)" value="'+esc(D.project.payLabel||'')+'" />'
@@ -940,8 +957,9 @@
       var nameVal=document.getElementById('stName').value.trim(), introVal=document.getElementById('stIntro').value, prepVal=document.getElementById('stPrep').value.trim();
       var payUrlVal=document.getElementById('stPayUrl').value.trim(), payLabelVal=document.getElementById('stPayLabel').value.trim();
       var subVal=document.getElementById('stSub').value.trim();
-      api('POST','/api/project-update',{projectId:D.project.id,name:nameVal,intro:introVal,preparedBy:prepVal,subtitle:subVal,payUrl:payUrlVal,payLabel:payLabelVal})
-        .then(function(){ if(nameVal) D.project.name=nameVal; D.project.intro=introVal; D.project.preparedBy=prepVal; D.project.subtitle=subVal; D.project.payUrl=payUrlVal; D.project.payLabel=payLabelVal; applyProjectChrome(); msg.className='acct-msg ok'; msg.textContent='Saved.'; })
+      var mdVal={artist:document.getElementById('stMdArtist').value.trim(),album:document.getElementById('stMdAlbum').value.trim(),genre:document.getElementById('stMdGenre').value.trim(),year:document.getElementById('stMdYear').value.trim()};
+      api('POST','/api/project-update',{projectId:D.project.id,name:nameVal,intro:introVal,preparedBy:prepVal,subtitle:subVal,metaDefaults:mdVal,payUrl:payUrlVal,payLabel:payLabelVal})
+        .then(function(){ if(nameVal) D.project.name=nameVal; D.project.intro=introVal; D.project.preparedBy=prepVal; D.project.subtitle=subVal; D.project.metaDefaults=mdVal; D.project.payUrl=payUrlVal; D.project.payLabel=payLabelVal; applyProjectChrome(); msg.className='acct-msg ok'; msg.textContent='Saved.'; })
         .catch(function(e){ msg.className='acct-msg err'; msg.textContent=(e&&e.error)||'Failed'; });
     });
   }
@@ -949,7 +967,7 @@
   // ---- admin dashboard (basic) ----
   function renderDashboard(){
     var tracks=allTracks();
-    var total=tracks.length, finalApproved=0, coversApproved=0, awaitingClient=0, rawToAccept=0;
+    var total=tracks.length, finalApproved=0, coversApproved=0, awaitingClient=0, rawToAccept=0, readyFinal=0;
     var attention=[];
     tracks.forEach(function(x){
       var tr=x.t, a=appr(tr.id), loc=x.sub?x.cat+' / '+x.sub:x.cat;
@@ -958,17 +976,19 @@
       if(tr.raw==='received'){ rawToAccept++; attention.push({tag:'To approve',cls:'await',title:tr.title,sub:loc+'  ·  raw recording is in — approve the quality to send it into production'}); }
       if(tr.raw==='rerecord') attention.push({tag:'Re-record',cls:'alert',title:tr.title,sub:loc+'  ·  flagged for re-record'});
       if(tr.cleaned && !a.cleanedApproved) awaitingClient++;
+      if(tr.cleaned && !detailsDone(a)) awaitingClient++;
       if(tr.final && !a.finalApproved) awaitingClient++;
       if(tr.art && !a.artApproved) awaitingClient++;
+      if(readyForFinal(tr)){ readyFinal++; attention.push({tag:'Produce final',cls:'await',title:tr.title,sub:loc+'  ·  vocal approved, music chosen and details confirmed: ready for you to produce the final master'}); }
       [['cleaned','Vocal'],['music','Music'],['final','Final'],['art','Cover']].forEach(function(p){
         var n=a[p[0]+'Note']; if(n) attention.push({tag:'Change',cls:'note',title:tr.title,sub:'['+p[1]+']  '+n});
       });
     });
-    var cards=[['Recordings',total,''],['Awaiting you',rawToAccept,'attn'],['Awaiting client',awaitingClient,''],['Final approved',finalApproved,''],['Covers approved',coversApproved,'']];
+    var cards=[['Recordings',total,''],['Awaiting you',rawToAccept,'attn'],['Ready for final',readyFinal,'attn'],['Awaiting client',awaitingClient,''],['Final approved',finalApproved,''],['Covers approved',coversApproved,'']];
     var ch='<div class="dash-cards">';
     cards.forEach(function(c){ ch+='<div class="dash-card '+c[2]+'"><div class="dc-num">'+c[1]+'</div><div class="dc-lbl">'+c[0]+'</div></div>'; });
     ch+='</div>';
-    var at='<div class="dash-sec"><h3>Needs your attention</h3><div class="sec-note">Raw recordings to approve, re-records, and every change the client has requested.</div>';
+    var at='<div class="dash-sec"><h3>Needs your attention</h3><div class="sec-note">Raw recordings to approve, recordings ready for you to produce the final, re-records, and every change the client has requested.</div>';
     if(attention.length) attention.forEach(function(it){ at+='<div class="dash-item"><span class="di-tag '+it.cls+'">'+esc(it.tag)+'</span><div class="di-body"><div class="di-title">'+esc(it.title)+'</div><div class="di-sub">'+esc(it.sub)+'</div></div></div>'; });
     else at+='<div class="dash-empty">Nothing waiting on you. Everything is with the client or complete.</div>';
     at+='</div>';
@@ -1137,6 +1157,7 @@
   function trackEl(tr){
     var wrap=document.createElement('div');wrap.className='track'+(appr(tr.id).finalApproved?' complete':'')+(openIds[tr.id]?' open':'');
     var st=steps(tr), lab=statusLabel(tr);
+    if(vr()==='admin' && readyForFinal(tr)) lab=['Ready to produce final','await'];   // your cue: vocal approved, music chosen, details in
     function stepHtml(cls,label,num,tip){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
     // Vocal tooltip must reflect the real state — never claim a recording is in / approved when it isn't.
     var hasRaw = !!(tr.audio && tr.audio.raw);
@@ -1150,8 +1171,9 @@
         +stepHtml(st.raw,'Vocal',1,rawTip)
         +stepHtml(st.cleaned,'Produced',2,"Craig's cleaned, produced version of your vocal. Approve it or request a change.")
         +stepHtml(st.music,'Music',3,"Your vocal set to music — up to three options, pick the one you love.")
-        +stepHtml(st.art,'Cover',4,"Your cover artwork — upload your own or approve the studio-created design.")
-        +stepHtml(st.final,'Final',5,"The finished master. Approve it and complete your purchase.")
+        +stepHtml(st.details,'Details',4,"Confirm the title, artist, album, genre and year that go into your finished file.")
+        +stepHtml(st.art,'Cover',5,"Your cover artwork — upload your own or approve the studio-created design.")
+        +stepHtml(st.final,'Final',6,"The finished master. Approve it and complete your purchase.")
       +'</div><div class="chev">▶</div>';
     var expand=document.createElement('div');expand.className='expand';
     wrap.appendChild(row);wrap.appendChild(expand);
@@ -1221,8 +1243,9 @@
     // Stages 2–5 (Cover Art now sits before Final Production)
     expand.appendChild(clientStage(tr,'2','Produced Vocal','cleaned','Listen and approve the produced vocal, or ask for a fix.','Craig produces the vocal here once the recording is approved.',"Craig's cleaned, produced version of your vocal. Approve it or request a change."));
     expand.appendChild(musicSamplesStage(tr,'3'));
-    expand.appendChild(artStage(tr,'4'));
-    expand.appendChild(finalStage(tr,'5'));
+    expand.appendChild(detailsStage(tr,'4'));
+    expand.appendChild(artStage(tr,'5'));
+    expand.appendChild(finalStage(tr,'6'));
     var pb=payBlock(tr); if(pb) expand.appendChild(pb);
   }
 
@@ -1251,6 +1274,41 @@
       return el2;
     }
     return null;
+  }
+
+  // Stage 4 — Track Details (title / artist / album / genre / year). Opens as soon as the produced vocal is ready, so the client can
+  // do it while the music is being made. Pre-filled from the recording title + project defaults, so they only confirm. The admin needs
+  // these BEFORE producing the final master, and can fill them in on the client's behalf.
+  function detailsStage(tr,num){
+    var a=appr(tr.id), open=!!tr.cleaned, done=detailsDone(a), isAdmin=vr()==='admin';
+    var chip=!open?['lock','Opens after the produced vocal']:(done?['done','Confirmed']:['await','Please confirm']);
+    var el=stageEl(num,'Track Details',chip[0],chip[1],"The title, artist, album, genre and year that go into your finished file. They are pre-filled: check them and confirm.");
+    if(!open && !isAdmin){
+      el.insertAdjacentHTML('beforeend','<div class="stage-body">You will confirm your track details here as soon as your produced vocal is ready.</div>');
+      return el;
+    }
+    var m=detailsStart(tr);
+    if(isAdmin) el.insertAdjacentHTML('beforeend','<div class="uling" style="margin-bottom:6px">'+(done?'The client has confirmed these details. You can edit them below.':'Not confirmed yet. The client sees these pre-filled values; you can also fill them in for them.')+'</div>');
+    else el.insertAdjacentHTML('beforeend','<div class="uling" style="margin-bottom:6px">Pre-filled to save you time. Change anything that is not right, then confirm.</div>');
+    var mf=document.createElement('div');mf.className='meta-form';
+    mf.innerHTML='<input class="full" data-m="title" placeholder="Title" value="'+esc(m.title)+'">'
+      +'<input data-m="artist" placeholder="Artist" value="'+esc(m.artist)+'">'
+      +'<input data-m="album" placeholder="Album / collection" value="'+esc(m.album)+'">'
+      +'<input data-m="genre" placeholder="Genre" value="'+esc(m.genre)+'">'
+      +'<input data-m="year" placeholder="Year" value="'+esc(m.year)+'">'
+      +'<button class="mini-btn full" data-msave style="justify-self:start">'+(isAdmin?'Save for the client':(done?'Save changes':'Confirm details'))+'</button>';
+    el.appendChild(mf);
+    var btn=mf.querySelector('[data-msave]');
+    if(PREVIEW){ mf.querySelectorAll('input,button').forEach(function(x){ x.disabled=true; }); btn.title='Read-only preview — log in with the client code to confirm'; }
+    else btn.addEventListener('click',function(){
+      var md={}; mf.querySelectorAll('[data-m]').forEach(function(inp){ md[inp.getAttribute('data-m')]=inp.value.trim(); });
+      if(!md.title){ mf.querySelector('[data-m="title"]').focus(); toast('A title is needed','err'); return; }
+      btn.disabled=true; btn.textContent='Saving…';
+      api('POST','/api/metadata',{trackId:tr.id,metadata:md,confirm:true})
+        .then(function(){ toast(isAdmin?'Details saved':'Details confirmed. Thank you.','ok'); return reloadKeepOpen(); })
+        .catch(function(){ btn.disabled=false; btn.textContent=isAdmin?'Save for the client':(done?'Save changes':'Confirm details'); toast('Save failed','err'); });
+    });
+    return el;
   }
 
   // Stage 5 — cover artwork (image, approved like the audio stages)
@@ -1350,7 +1408,8 @@
     var samples=Array.isArray(tr.samples)?tr.samples:[];
     var rec=(typeof tr.recommended==='number')?tr.recommended:0;
     var sel=(typeof a.musicSelected==='number')?a.musicSelected:-1;
-    var chip = !ready?['lock','In progress']:(sel>=0?['done','Selected']:['await','Choose your music']);
+    var single = samples.filter(Boolean).length===1;   // one sample = a single "approve" click, no choosing
+    var chip = !ready?['lock','In progress']:(sel>=0?['done',single?'Approved':'Selected']:['await',single?'Approve your music':'Choose your music']);
     var el=stageEl(num,'Music Samples',chip[0],chip[1],"Your vocal set to music — up to three options, pick the one you love.");
 
     if(ready){
@@ -1360,12 +1419,12 @@
         if(!f) return; anyFile=true;
         var chosen=(sel===i);
         var box=document.createElement('div');box.className='sample'+(chosen?' chosen':'');
-        box.innerHTML='<div class="sample-head">Option '+(i+1)
-          +(i===rec?' <span class="sample-rec">Recommended</span>':'')
-          +(chosen?' <span class="sample-rec" style="color:var(--done);background:var(--done-bg)">Your pick ✓</span>':'')
+        box.innerHTML='<div class="sample-head">'+(single?'Your music':'Option '+(i+1))
+          +(i===rec&&!single?' <span class="sample-rec">Recommended</span>':'')
+          +(chosen?' <span class="sample-rec" style="color:var(--done);background:var(--done-bg)">'+(single?'Approved ✓':'Your pick ✓')+'</span>':'')
           +'</div>'+audioHtml(f);
         if(vr()==='client'){
-          var cb=document.createElement('button');cb.className='choose-btn'+(chosen?' on':'');cb.textContent=chosen?'Chosen ✓':'Choose this one';
+          var cb=document.createElement('button');cb.className='choose-btn'+(chosen?' on':'');cb.textContent=chosen?(single?'Approved ✓':'Chosen ✓'):(single?'Approve this music':'Choose this one');
           box.appendChild(cb);
           if(!PREVIEW){ cb.addEventListener('click',function(){ api('POST','/api/select-sample',{trackId:tr.id,index:(chosen?-1:i)}).then(reloadKeepOpen); }); }
           else { cb.disabled=true; cb.title='Read-only preview — log in with the client code to choose'; }
@@ -1416,7 +1475,7 @@
     var a=appr(tr.id), ready=!!tr.final, file=tr.audio.final;
     var levels=!!a.levelsApproved, wording=!!a.wordingApproved, approved=levels&&wording;
     var chip = !ready?['lock','In progress']:(approved?['done','Approved']:['await','Awaiting client']);
-    var el=stageEl(num,'Final Production',chip[0],chip[1],"The finished master. Approve the levels and the wording, add your metadata, then complete your purchase.");
+    var el=stageEl(num,'Final Production',chip[0],chip[1],"The finished master. Approve the levels and the wording, then complete your purchase.");
 
     if(ready){
       el.insertAdjacentHTML('beforeend',audioHtml(file));
@@ -1429,41 +1488,21 @@
         el.appendChild(dual);
         var nb=document.createElement('textarea');nb.className='note-box'+((a.finalNote)?' open':'');nb.placeholder='What would you like changed?';nb.value=a.finalNote||'';
         el.appendChild(nb);
-        var m=a.metadata||{};
-        el.insertAdjacentHTML('beforeend','<div class="uling" style="margin-top:10px">Your track details (carried into the finished file):</div>');
-        var mf=document.createElement('div');mf.className='meta-form';
-        mf.innerHTML='<input class="full" data-m="title" placeholder="Title" value="'+esc(m.title||'')+'">'
-          +'<input data-m="artist" placeholder="Artist" value="'+esc(m.artist||'')+'">'
-          +'<input data-m="album" placeholder="Album / collection" value="'+esc(m.album||'')+'">'
-          +'<input data-m="genre" placeholder="Genre" value="'+esc(m.genre||'')+'">'
-          +'<input data-m="year" placeholder="Year" value="'+esc(m.year||'')+'">'
-          +'<button class="mini-btn full" data-msave style="justify-self:start">Save metadata</button>';
-        el.appendChild(mf);
         dual.querySelector('[data-notet]').addEventListener('click',function(){ nb.classList.toggle('open'); if(nb.classList.contains('open')) nb.focus(); });
         if(!PREVIEW){
           dual.querySelector('[data-lev]').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:'levels',approved:!levels}).then(reloadKeepOpen); });
           dual.querySelector('[data-word]').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:'wording',approved:!wording}).then(reloadKeepOpen); });
           nb.addEventListener('change',function(){ api('POST','/api/note',{trackId:tr.id,stage:'final',note:nb.value.trim()}).then(function(){ a.finalNote=nb.value.trim(); refreshBar(); }); });
-          mf.querySelector('[data-msave]').addEventListener('click',function(){
-            var md={}; mf.querySelectorAll('[data-m]').forEach(function(inp){ md[inp.getAttribute('data-m')]=inp.value.trim(); });
-            var btn=mf.querySelector('[data-msave]'); btn.disabled=true; btn.textContent='Saving…';
-            api('POST','/api/metadata',{trackId:tr.id,metadata:md}).then(function(){ a.metadata=md; btn.textContent='Saved ✓'; setTimeout(function(){ btn.disabled=false; btn.textContent='Save metadata'; },1600); })
-              .catch(function(){ btn.disabled=false; btn.textContent='Save metadata'; toast('Save failed','err'); });
-          });
         } else {
           dual.querySelectorAll('button').forEach(function(b){ b.disabled=true; });
-          nb.readOnly=true; mf.querySelectorAll('input,button').forEach(function(x){ x.disabled=true; });
+          nb.readOnly=true;
         }
       } else {
         el.insertAdjacentHTML('beforeend','<div class="uling" style="margin-top:8px">Client approvals — levels '+(levels?'✓':'—')+' · wording '+(wording?'✓':'—')+'</div>');
-        var m2=a.metadata||{};
-        if(m2.title||m2.artist||m2.album||m2.genre||m2.year){
-          el.insertAdjacentHTML('beforeend','<div class="meta-view"><b>Client metadata:</b> '+esc([m2.title,m2.artist,m2.album,m2.genre,m2.year].filter(Boolean).join(' · '))+'</div>');
-        }
         if(a.finalNote) el.insertAdjacentHTML('beforeend','<div class="client-note-view"><b>Client note:</b> '+esc(a.finalNote)+'</div>');
       }
     } else {
-      el.insertAdjacentHTML('beforeend','<div class="stage-body">The final production comes together after you choose your music.</div>');
+      el.insertAdjacentHTML('beforeend','<div class="stage-body">The final production comes together after you have chosen your music and confirmed your track details.</div>');
     }
 
     if(vr()==='admin'){
@@ -1491,9 +1530,10 @@
   }
 
   document.getElementById('copyBtn').addEventListener('click',function(){
-    var lines=[D.project.name+' — my review','('+D.client.name+')',''],fin=[],voc=[],cov=[],notes=[];
+    var lines=[D.project.name+' — my review','('+D.client.name+')',''],fin=[],voc=[],cov=[],notes=[],det=[];
     allTracks().forEach(function(x){
       var a=appr(x.t.id),loc=x.sub?x.cat+' / '+x.sub:x.cat,ttl=x.t.title;
+      if(detailsDone(a)) det.push('✓ '+ttl+' ('+loc+')');
       if(a.finalApproved)fin.push('✓ '+ttl+' ('+loc+')'); else if(a.cleanedApproved)voc.push('• '+ttl+' — vocal approved ('+loc+')');
       if(a.artApproved)cov.push('✓ '+ttl+' ('+loc+')');
       if(a.cleanedNote)notes.push('• '+ttl+' [vocal]: '+a.cleanedNote);
@@ -1503,6 +1543,7 @@
     });
     lines.push('FINAL APPROVED ('+fin.length+'):');lines=lines.concat(fin.length?fin:['(none yet)']);
     lines.push('','VOCAL APPROVED, awaiting final ('+voc.length+'):');lines=lines.concat(voc.length?voc:['(none)']);
+    lines.push('','TRACK DETAILS CONFIRMED ('+det.length+'):');lines=lines.concat(det.length?det:['(none)']);
     lines.push('','COVER ART APPROVED ('+cov.length+'):');lines=lines.concat(cov.length?cov:['(none)']);
     lines.push('','NOTES / CHANGES ('+notes.length+'):');lines=lines.concat(notes.length?notes:['(none)']);
     var text=lines.join('\n'),btn=this,method=(D.contact&&D.contact.method)||'WhatsApp';

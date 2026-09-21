@@ -72,13 +72,18 @@ function newTrack(project, title, raw){
 }
 function countPieces(project){ var n=0; eachTrack(project, function(){ n++; }); return n; }
 // per-project numbers for the admin home (same definitions as the per-project dashboard)
+// track details count as done once the client confirmed them (or, for older data, once a title was saved)
+function detailsDone(a){ return !!(a && (a.detailsConfirmed || (a.metadata && a.metadata.title))); }
 function projectStats(project){
-  var s={ total:0, complete:0, toReview:0, rerecord:0, awaitingClient:0, changes:0 }, A=project.approvals||{};
+  var s={ total:0, complete:0, toReview:0, rerecord:0, awaitingClient:0, changes:0, readyForFinal:0 }, A=project.approvals||{};
   eachTrack(project, function(tr){
     var a=A[tr.id]||{}; s.total++;
     if(a.finalApproved) s.complete++;
     if(tr.raw==='received') s.toReview++;
     if(tr.raw==='rerecord') s.rerecord++;
+    if(tr.cleaned && !detailsDone(a)) s.awaitingClient++;
+    // everything the final master depends on is in: vocal approved, music chosen, details confirmed
+    if(a.cleanedApproved && a.musicSeen && detailsDone(a) && !tr.final) s.readyForFinal++;
     if(tr.cleaned && !a.cleanedApproved) s.awaitingClient++;
     if(tr.final && !a.finalApproved) s.awaitingClient++;
     if(tr.art && !a.artApproved) s.awaitingClient++;
@@ -287,7 +292,7 @@ app.get('/api/data', requireAuth, function(req,res){
   const proj=ctx.project, client=ctx.client;
   const out={ role:req.role, brand:DATA.brand,
     client:{ id:client.id, name:client.name, logo:client.logo||'' },
-    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', payUrl:proj.payUrl||'', payLabel:proj.payLabel||'' },
+    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', metaDefaults:proj.metaDefaults||{}, payUrl:proj.payUrl||'', payLabel:proj.payLabel||'' },
     contact: client.contact || {method:'WhatsApp'},
     categories: proj.categories, approvals: proj.approvals };
   if(req.role==='admin'){
@@ -336,11 +341,13 @@ app.post('/api/select-sample', requireAuth, function(req,res){
 // client submits final metadata (title/artist/album/genre/year)
 app.post('/api/metadata', requireAuth, function(req,res){
   const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
-  const proj=ctx.project, {trackId, metadata} = req.body||{};
+  const proj=ctx.project, {trackId, metadata, confirm} = req.body||{};
+  if(!findTrack(proj, trackId)) return res.status(404).json({error:'no track'});
   const m = metadata||{}, s=function(v,n){ return String(v==null?'':v).slice(0,n); };
   const a = proj.approvals[trackId] || (proj.approvals[trackId]={});
   a.metadata = { title:s(m.title,200), artist:s(m.artist,200), album:s(m.album,200), genre:s(m.genre,80), year:s(m.year,10) };
-  saveData(DATA); res.json({ok:true, metadata:a.metadata});
+  if(confirm) a.detailsConfirmed = !!a.metadata.title;   // "Confirm details" (client, or admin filling in on their behalf); a title is required
+  saveData(DATA); res.json({ok:true, metadata:a.metadata, detailsConfirmed:!!a.detailsConfirmed});
 });
 
 // ---- admin: piece edits (operate on the active project) ----
@@ -495,6 +502,10 @@ app.post('/api/project-update', requireAdmin, function(req,res){
   if(p.intro!=null) proj.intro=String(p.intro).slice(0,2000);
   if(p.preparedBy!=null) proj.preparedBy=String(p.preparedBy).slice(0,120);
   if(p.subtitle!=null) proj.subtitle=String(p.subtitle).slice(0,200);   // blank = auto "Prepared for … · produced by …"
+  if(p.metaDefaults && typeof p.metaDefaults==='object'){   // pre-filled into every recording's Track Details (artist / album / genre / year)
+    var md=p.metaDefaults, sv=function(v,n){ return String(v==null?'':v).trim().slice(0,n); };
+    proj.metaDefaults={ artist:sv(md.artist,200), album:sv(md.album,200), genre:sv(md.genre,80), year:sv(md.year,10) };
+  }
   if(p.payUrl!=null){
     var u=String(p.payUrl).trim().slice(0,500);
     if(u==='' || /^https?:\/\//i.test(u)) proj.payUrl=u;
