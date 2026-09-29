@@ -67,7 +67,8 @@ function newTrack(project, title, raw){
     note: '', description:'',
     raw: raw || 'none', cleaned:false, music:false, final:false, art:false,
     samples: ['','',''], recommended:0,
-    audio: { raw:'', cleaned:'', music:'', final:'' }, cover:''
+    audio: { raw:'', cleaned:'', music:'', final:'' }, cover:'',
+    payUrl:'', payLabel:'', paid:false, paidAt:null, paidVia:null, paidFlagged:false, paidFlaggedAt:null
   };
 }
 function countPieces(project){ var n=0; eachTrack(project, function(){ n++; }); return n; }
@@ -133,6 +134,13 @@ function normalizeProjectTracks(project){
     ['raw','cleaned','music','final'].forEach(function(k){ if(!(k in tr.audio)){ tr.audio[k]=''; changed=true; } });
     if('induction' in tr){ delete tr.induction; changed=true; }
     if('endMusic' in tr){ delete tr.endMusic; changed=true; }
+    if(!('payUrl' in tr)){ tr.payUrl=''; changed=true; }
+    if(!('payLabel' in tr)){ tr.payLabel=''; changed=true; }
+    if(!('paid' in tr)){ tr.paid=false; changed=true; }
+    if(!('paidAt' in tr)){ tr.paidAt=null; changed=true; }
+    if(!('paidVia' in tr)){ tr.paidVia=null; changed=true; }
+    if(!('paidFlagged' in tr)){ tr.paidFlagged=false; changed=true; }
+    if(!('paidFlaggedAt' in tr)){ tr.paidFlaggedAt=null; changed=true; }
   });
   return changed;
 }
@@ -168,8 +176,6 @@ function migrateData(data){
       if(!p.approvals){ p.approvals={}; changed=true; }
       if(!p.auth){ p.auth={}; changed=true; }
       if(typeof p.preparedBy!=='string'){ p.preparedBy='Craig Young'; changed=true; }
-      if(!('payUrl' in p)){ p.payUrl=''; changed=true; }
-      if(!('payLabel' in p)){ p.payLabel=''; changed=true; }
       if(normalizeProjectTracks(p)) changed=true;
     });
   });
@@ -253,6 +259,38 @@ function currentContext(req){
 
 // ---------- app ----------
 const app = express();
+
+// ---------- Stripe payment webhook ----------
+// Each recording's Approve & Pay link carries "<projectId>:<trackId>" as ?client_reference_id= (see payLinkFor in
+// index.html), so a completed checkout tells us exactly which recording got paid — no per-link setup in Stripe needed.
+// Mounted with its own raw-body parser, before the global express.json() below, because signature verification
+// needs the exact bytes Stripe sent.
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+function verifyStripeSignature(rawBody, sigHeader, secret){
+  if(!sigHeader || !secret) return false;
+  const parts={};
+  sigHeader.split(',').forEach(function(kv){ const i=kv.indexOf('='); if(i>0) parts[kv.slice(0,i)]=kv.slice(i+1); });
+  if(!parts.t || !parts.v1) return false;
+  const expected = crypto.createHmac('sha256', secret).update(parts.t+'.'+rawBody, 'utf8').digest('hex');
+  try{ return crypto.timingSafeEqual(Buffer.from(expected,'hex'), Buffer.from(parts.v1,'hex')); }catch(e){ return false; }
+}
+app.post('/webhook/stripe', express.raw({type:'application/json'}), function(req,res){
+  if(!STRIPE_WEBHOOK_SECRET) return res.status(500).end();   // refuse to process events we can't verify
+  const raw = req.body.toString('utf8');
+  if(!verifyStripeSignature(raw, req.headers['stripe-signature'], STRIPE_WEBHOOK_SECRET)) return res.status(400).end();
+  let event; try{ event=JSON.parse(raw); }catch(e){ return res.status(400).end(); }
+  if(event.type==='checkout.session.completed'){
+    const session=(event.data && event.data.object) || {};
+    const ref=session.client_reference_id;
+    if(session.payment_status==='paid' && ref && ref.indexOf(':')>0){
+      const projectId=ref.slice(0, ref.indexOf(':')), trackId=ref.slice(ref.indexOf(':')+1);
+      const found=findProject(projectId), tr=found && findTrack(found.project, trackId);
+      if(tr){ tr.paid=true; tr.paidAt=new Date().toISOString(); tr.paidVia='stripe'; tr.paidFlagged=false; tr.paidFlaggedAt=null; saveData(DATA); }
+    }
+  }
+  res.status(200).end();
+});
+
 app.use(express.json());
 
 app.post('/api/login', function(req,res){
@@ -293,7 +331,7 @@ app.get('/api/data', requireAuth, function(req,res){
   const proj=ctx.project, client=ctx.client;
   const out={ role:req.role, brand:DATA.brand,
     client:{ id:client.id, name:client.name, logo:client.logo||'' },
-    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', art:proj.art||'', metaDefaults:proj.metaDefaults||{}, payUrl:proj.payUrl||'', payLabel:proj.payLabel||'' },
+    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', art:proj.art||'', metaDefaults:proj.metaDefaults||{} },
     contact: client.contact || {method:'WhatsApp'},
     categories: proj.categories, approvals: proj.approvals };
   if(req.role==='client') out.proposals = client.proposals || [];   // a client only ever sees their own proposals
@@ -426,7 +464,26 @@ app.post('/api/track/:id', requireAdmin, function(req,res){
     ['cleaned','music','art','final'].forEach(function(k){ if(p.producerNote[k]!=null) tr.producerNote[k]=String(p.producerNote[k]).slice(0,2000); });
   }
   if(p.recommended!=null){ var ri=parseInt(p.recommended,10); if(ri>=0&&ri<=2) tr.recommended=ri; }
+  if(p.payUrl!=null){
+    var pu=String(p.payUrl).trim().slice(0,500);
+    if(pu==='' || /^https?:\/\//i.test(pu)) tr.payUrl=pu;
+    else return res.status(400).json({error:'Payment link must start with https://'});
+  }
+  if(p.payLabel!=null) tr.payLabel=String(p.payLabel).slice(0,120);
+  if(p.paid!=null){
+    var wantPaid=!!p.paid;
+    if(wantPaid!==tr.paid){ tr.paid=wantPaid; tr.paidAt=wantPaid?new Date().toISOString():null; tr.paidVia=wantPaid?'admin':null; }
+    if(wantPaid){ tr.paidFlagged=false; tr.paidFlaggedAt=null; }
+  }
   saveData(DATA); res.json({ok:true, track:tr});
+});
+// client self-report — "I've sent this payment", a nudge for the admin, not authoritative on its own.
+// tr.paid (the field that actually unlocks the "Paid" state) is only ever set by an admin or the Stripe webhook.
+app.post('/api/track/:id/flag-paid', requireAuth, function(req,res){
+  const ctx=currentContext(req); if(!ctx || req.role!=='client') return res.status(403).json({error:'client only'});
+  const tr=findTrack(ctx.project, req.params.id); if(!tr) return res.status(404).json({error:'no track'});
+  if(!tr.paid){ tr.paidFlagged=true; tr.paidFlaggedAt=new Date().toISOString(); saveData(DATA); }
+  res.json({ok:true, paidFlagged:tr.paidFlagged, paid:tr.paid});
 });
 app.post('/api/track-add', requireAdmin, function(req,res){
   const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
@@ -586,12 +643,6 @@ app.post('/api/project-update', requireAdmin, function(req,res){
     var md=p.metaDefaults, sv=function(v,n){ return String(v==null?'':v).trim().slice(0,n); };
     proj.metaDefaults={ artist:sv(md.artist,200), album:sv(md.album,200), genre:sv(md.genre,80), year:sv(md.year,10) };
   }
-  if(p.payUrl!=null){
-    var u=String(p.payUrl).trim().slice(0,500);
-    if(u==='' || /^https?:\/\//i.test(u)) proj.payUrl=u;
-    else return res.status(400).json({error:'Payment link must start with https://'});
-  }
-  if(p.payLabel!=null) proj.payLabel=String(p.payLabel).slice(0,120);
   saveData(DATA); res.json({ok:true});
 });
 app.post('/api/project-set-code', requireAdmin, function(req,res){

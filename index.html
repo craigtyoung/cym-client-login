@@ -158,6 +158,7 @@
   .pay-btn{display:inline-block;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;background:var(--gold);color:#fff;border:none;padding:11px 22px;border-radius:10px;text-decoration:none}
   .pay-btn:hover{background:var(--gold-2)}
   .pay-btn.disabled{opacity:.5;cursor:not-allowed;pointer-events:none}
+  .pay-btn.done{background:var(--done);cursor:default;pointer-events:none}
   .pay-note{font-size:11.5px;color:var(--muted);margin-top:8px}
   /* Music samples */
   .sample{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;background:#fff}
@@ -1180,9 +1181,7 @@
       +'<input id="stMdAlbum" placeholder="Album / collection" value="'+esc((D.project.metaDefaults||{}).album||'')+'" />'
       +'<input id="stMdGenre" placeholder="Genre" value="'+esc((D.project.metaDefaults||{}).genre||'')+'" />'
       +'<input id="stMdYear" placeholder="Year" value="'+esc((D.project.metaDefaults||{}).year||'')+'" />'
-      +'<div class="lbl" style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-top:6px">Payment (Approve &amp; Pay button)</div>'
-      +'<input id="stPayUrl" placeholder="Stripe payment link (https://buy.stripe.com/...)" value="'+esc(D.project.payUrl||'')+'" />'
-      +'<input id="stPayLabel" placeholder="Price label shown to client (e.g. $400 USD · Preferred Client)" value="'+esc(D.project.payLabel||'')+'" />'
+      +'<div class="sec-note" style="margin:0">Payment links and prices are set per recording, in that recording&rsquo;s Final Production admin box.</div>'
       +'<div><button class="mini-btn" id="stSave">Save settings</button></div>'
       +'</div><div class="acct-msg" id="stMsg"></div>';
     host.appendChild(w);
@@ -1192,11 +1191,10 @@
     document.getElementById('stSave').addEventListener('click',function(){
       var msg=document.getElementById('stMsg');
       var nameVal=document.getElementById('stName').value.trim(), introVal=document.getElementById('stIntro').value, prepVal=document.getElementById('stPrep').value.trim();
-      var payUrlVal=document.getElementById('stPayUrl').value.trim(), payLabelVal=document.getElementById('stPayLabel').value.trim();
       var subVal=document.getElementById('stSub').value.trim();
       var mdVal={artist:document.getElementById('stMdArtist').value.trim(),album:document.getElementById('stMdAlbum').value.trim(),genre:document.getElementById('stMdGenre').value.trim(),year:document.getElementById('stMdYear').value.trim()};
-      api('POST','/api/project-update',{projectId:D.project.id,name:nameVal,intro:introVal,preparedBy:prepVal,subtitle:subVal,metaDefaults:mdVal,payUrl:payUrlVal,payLabel:payLabelVal})
-        .then(function(){ if(nameVal) D.project.name=nameVal; D.project.intro=introVal; D.project.preparedBy=prepVal; D.project.subtitle=subVal; D.project.metaDefaults=mdVal; D.project.payUrl=payUrlVal; D.project.payLabel=payLabelVal; applyProjectChrome(); msg.className='acct-msg ok'; msg.textContent='Saved.'; })
+      api('POST','/api/project-update',{projectId:D.project.id,name:nameVal,intro:introVal,preparedBy:prepVal,subtitle:subVal,metaDefaults:mdVal})
+        .then(function(){ if(nameVal) D.project.name=nameVal; D.project.intro=introVal; D.project.preparedBy=prepVal; D.project.subtitle=subVal; D.project.metaDefaults=mdVal; applyProjectChrome(); msg.className='acct-msg ok'; msg.textContent='Saved.'; })
         .catch(function(e){ msg.className='acct-msg err'; msg.textContent=(e&&e.error)||'Failed'; });
     });
   }
@@ -1491,27 +1489,48 @@
   }
 
   // Approve & Pay — client sees a grayed button once the Final master is ready; it activates on approval.
+  // Payment is per recording: tr.payUrl/tr.payLabel/tr.paid, set in this recording's Final Production admin box.
+  // The link carries "<projectId>:<trackId>" so Stripe's webhook (or an admin's manual "Mark as paid") always
+  // resolves to this exact recording, even though several recordings can share one project.
+  function payLinkFor(url, tr){
+    if(!url) return url;
+    var ref=encodeURIComponent(D.project.id+':'+tr.id);
+    return url+(url.indexOf('?')>=0?'&':'?')+'client_reference_id='+ref;
+  }
   function payBlock(tr){
-    var a=appr(tr.id), payUrl=D.project.payUrl, payLabel=D.project.payLabel||'';
+    var a=appr(tr.id), payUrl=tr.payUrl, payLabel=tr.payLabel||'';
     if(vr()==='client'){
       if(!tr.final) return null;                 // only once the final master is released
       var approved=!!a.finalApproved;
       var el=document.createElement('div');el.className='pay-block';
+      if(tr.paid){
+        el.innerHTML='<div class="pay-lbl">Paid'+(payLabel?' · <b>'+esc(payLabel)+'</b>':'')+'</div><span class="pay-btn done">Paid &#10003;</span>';
+        return el;
+      }
       var h='<div class="pay-lbl">'+(approved?'You have approved the final master.':'Approve the final master above to complete your purchase.')+(payLabel?' <b>'+esc(payLabel)+'</b>':'')+'</div>';
       if(approved && payUrl){
-        h+='<a class="pay-btn" href="'+esc(payUrl)+'" target="_blank" rel="noopener">Approve &amp; Pay</a>';
+        h+='<a class="pay-btn" href="'+esc(payLinkFor(payUrl,tr))+'" target="_blank" rel="noopener">Approve &amp; Pay</a>';
+        h+='<div class="pay-note">'+(tr.paidFlagged?'Thanks — Craig will confirm your payment shortly.':'Already sent it? <a href="#" data-flagpaid>Let Craig know</a>.')+'</div>';
       }else if(approved && !payUrl){
         h+='<span class="pay-btn disabled">Approve &amp; Pay</span><div class="pay-note">Payment link is being finalised.</div>';
       }else{
         h+='<span class="pay-btn disabled">Approve &amp; Pay</span><div class="pay-note">Available once you approve the final master above.</div>';
       }
-      el.innerHTML=h; return el;
+      el.innerHTML=h;
+      var flagLink=el.querySelector('[data-flagpaid]');
+      if(flagLink) flagLink.addEventListener('click',function(ev){
+        ev.preventDefault();
+        if(PREVIEW) return;
+        api('POST','/api/track/'+tr.id+'/flag-paid',{}).then(reloadKeepOpen);
+      });
+      return el;
     }
     if(vr()==='admin' && tr.final){
       var el2=document.createElement('div');el2.className='pay-block';
-      el2.innerHTML='<div class="pay-lbl">Payment — shown to the client once they approve the final.</div>'
-        +(payUrl?'<div class="pay-note">Pay link set'+(payLabel?' · '+esc(payLabel):'')+'. Change it in <b>Settings</b>.</div>'
-                :'<div class="pay-note">No pay link yet — add your Stripe link in <b>Settings</b> so Approve &amp; Pay works.</div>');
+      var status = tr.paid ? '<b>Paid</b>'+(tr.paidVia?' via '+esc(tr.paidVia):'')+(tr.paidAt?' · '+new Date(tr.paidAt).toLocaleDateString():'')
+        : (tr.paidFlagged ? 'Client says they sent payment — confirm below.' : (payUrl?'Awaiting payment.':'No pay link yet.'));
+      el2.innerHTML='<div class="pay-lbl">Payment — '+status+'</div>'
+        +'<div class="pay-note">Set the link, price and paid status in the Final Production admin box above.</div>';
       return el2;
     }
     return null;
@@ -1750,10 +1769,21 @@
       var ab=document.createElement('div');ab.className='admin-box';
       ab.innerHTML='<div class="lbl">Admin — Final Production</div>'
         +'<div class="admin-row" data-file-row></div>'
-        +'<div class="admin-row"><label class="toggle-lbl"><input type="checkbox" data-ready '+(ready?'checked':'')+'> Ready for client to review</label></div>';
+        +'<div class="admin-row"><label class="toggle-lbl"><input type="checkbox" data-ready '+(ready?'checked':'')+'> Ready for client to review</label></div>'
+        +'<div class="lbl" style="margin-top:10px">Payment for this recording</div>'
+        +'<div class="admin-row"><input data-payurl placeholder="Stripe payment link (https://buy.stripe.com/...)" value="'+esc(tr.payUrl||'')+'" style="width:100%" /></div>'
+        +'<div class="admin-row"><input data-paylabel placeholder="Price label shown to client (e.g. $400 USD)" value="'+esc(tr.payLabel||'')+'" style="width:100%" /></div>'
+        +'<div class="admin-row"><label class="toggle-lbl"><input type="checkbox" data-paid '+(tr.paid?'checked':'')+'> Mark as paid</label>'
+          +(tr.paid?' <span class="uling">'+esc(tr.paidVia||'')+(tr.paidAt?' · '+new Date(tr.paidAt).toLocaleDateString():'')+'</span>'
+                   :(tr.paidFlagged?' <span class="uling" style="color:var(--gold)">Client says they sent payment</span>':''))
+        +'</div>';
       ab.querySelector('[data-file-row]').appendChild(fileControl({tr:tr,stage:'final',cur:file,warn:(levels||wording)?REPLACE_WARN:'',removeWarn:REMOVE_WARN}));
       var readyCb=ab.querySelector('[data-ready]');
       readyCb.addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{final:readyCb.checked}).then(reloadKeepOpen); });
+      var payUrlEl=ab.querySelector('[data-payurl]'), payLabelEl=ab.querySelector('[data-paylabel]'), paidCb=ab.querySelector('[data-paid]');
+      payUrlEl.addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{payUrl:payUrlEl.value.trim()}).then(reloadKeepOpen).catch(function(e){ toast(errMsg(e,'Save failed'),'err'); }); });
+      payLabelEl.addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{payLabel:payLabelEl.value.trim()}).then(reloadKeepOpen); });
+      paidCb.addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{paid:paidCb.checked}).then(reloadKeepOpen); });
       ab.appendChild(producerNoteEditor(tr,'final'));
       el.appendChild(ab);
     }
