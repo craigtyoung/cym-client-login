@@ -106,7 +106,6 @@
   .track:last-child{border-bottom:none}
   .row{display:flex;align-items:center;gap:16px;padding:13px 16px;cursor:pointer}
   .row:hover{background:#fbfbfd}
-  .track.complete .row{background:var(--done-bg)}
   .prop-card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;box-shadow:var(--shadow)}
   .prop-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
   .prop-title{font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:var(--navy)}
@@ -133,6 +132,7 @@
   .r-status{font-size:12px;margin-top:3px;font-weight:500}
   .r-status.done{color:var(--done)} .r-status.await{color:var(--await)} .r-status.alert{color:var(--alert)} .r-status.neutral{color:var(--muted)}
   .r-unpaid{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);background:var(--await-bg);padding:2px 8px;border-radius:20px}
+  .r-paid{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--done);background:var(--done-bg);padding:2px 8px;border-radius:20px}
 
   .tracker{display:flex;align-items:flex-start;gap:0}
   .step{display:flex;flex-direction:column;align-items:center;width:66px;position:relative}
@@ -1401,7 +1401,7 @@
     var st=steps(tr), lab=statusLabel(tr);
     if(vr()==='admin' && tr.fromClient && tr.raw==='received') lab=['New from client · to review','await'];   // the client sent this in themselves
     if(vr()==='admin' && readyForFinal(tr)) lab=['Ready to produce final','await'];   // your cue: vocal approved, music chosen, details in
-    var unpaidBadge = (vr()==='admin' && tr.final && appr(tr.id).finalApproved && !tr.paid) ? ' <span class="r-unpaid">Unpaid</span>' : '';   // gentle flag, doesn't override the status colour itself
+    var paymentBadge = (vr()==='admin' && tr.final && appr(tr.id).finalApproved) ? (tr.paid ? ' <span class="r-paid">Paid</span>' : ' <span class="r-unpaid">Unpaid</span>') : '';   // gentle flag either way, doesn't override the status colour itself
     function stepHtml(cls,label,num,tip){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
     // Vocal tooltip must reflect the real state — never claim a recording is in / approved when it isn't.
     var hasRaw = !!(tr.audio && tr.audio.raw);
@@ -1420,7 +1420,7 @@
         +'<a class="r-thumb-btn" href="audio/'+encodeURIComponent(tr.audio.final)+'" download title="Download final master">&#8681;</a>'
       +'</div>' : '';
     var thumb = '<div class="r-thumb-wrap">'+thumbInner+thumbHover+'</div>';
-    row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+unpaidBadge+'</div></div>'
+    row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+paymentBadge+'</div></div>'
       +'<div class="tracker">'
         +stepHtml(st.raw,'Vocal',1,rawTip)
         +stepHtml(st.cleaned,'Produced',2,"Craig's cleaned, produced version of your vocal. Approve it or request a change.")
