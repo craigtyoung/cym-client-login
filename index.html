@@ -121,12 +121,18 @@
   .prop-form input,.prop-form textarea{font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:9px}
   .prop-form textarea{min-height:76px;resize:vertical}
   .prop-h{font-family:'Fraunces',serif;font-size:18px;color:var(--navy);margin:8px 0 12px}
-  .r-thumb{width:48px;height:48px;border-radius:9px;object-fit:cover;flex:none;background:#f0f1f6;box-shadow:0 1px 5px rgba(20,26,45,.16);margin-right:-4px}
+  .r-thumb-wrap{position:relative;flex:none;margin-right:-4px}
+  .r-thumb{width:48px;height:48px;border-radius:9px;object-fit:cover;display:block;background:#f0f1f6;box-shadow:0 1px 5px rgba(20,26,45,.16)}
   .r-thumb-empty{display:flex;align-items:center;justify-content:center;color:#b9bfd0;font-size:19px;box-shadow:none;border:1px dashed var(--line);background:#fafbfd}
+  .r-thumb-hover{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:3px;background:rgba(20,26,45,.6);border-radius:9px;opacity:0;pointer-events:none;transition:opacity .15s}
+  .r-thumb-wrap:hover .r-thumb-hover{opacity:1;pointer-events:auto}
+  .r-thumb-btn{background:none;border:none;color:#fff;font-size:14px;cursor:pointer;padding:5px;line-height:1;text-decoration:none;display:flex;align-items:center;justify-content:center;border-radius:5px}
+  .r-thumb-btn:hover{color:var(--navy);background:#fff}
   .r-main{flex:1;min-width:0}
   .r-title{font-size:14.5px;font-weight:600;color:var(--ink)}
   .r-status{font-size:12px;margin-top:3px;font-weight:500}
   .r-status.done{color:var(--done)} .r-status.await{color:var(--await)} .r-status.alert{color:var(--alert)} .r-status.neutral{color:var(--muted)}
+  .r-unpaid{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);background:var(--await-bg);padding:2px 8px;border-radius:20px}
 
   .tracker{display:flex;align-items:flex-start;gap:0}
   .step{display:flex;flex-direction:column;align-items:center;width:66px;position:relative}
@@ -139,8 +145,6 @@
   .step::before{content:"";position:absolute;top:7px;left:-33px;width:66px;height:2px;background:var(--lock);z-index:1}
   .step:first-child::before{display:none}
   .step.on-line::before{background:var(--done)}
-  .r-download{color:var(--muted);font-size:17px;flex:0 0 auto;text-decoration:none;padding:4px 6px;border-radius:6px}
-  .r-download:hover{color:var(--gold);background:var(--await-bg)}
   .chev{color:var(--muted);font-size:13px;transition:transform .2s;flex:0 0 auto}
   .track.open .chev{transform:rotate(90deg)}
 
@@ -1209,7 +1213,7 @@
     tracks.forEach(function(x){
       var tr=x.t, a=appr(tr.id), loc=x.sub?x.cat+' / '+x.sub:x.cat;
       if(a.finalApproved) finalApproved++;
-      if(a.finalApproved && !tr.paid){ unpaid++; attention.push({tag:'Unpaid',cls:'alert',title:tr.title,sub:loc+'  ·  final approved but not yet marked paid'}); }
+      if(a.finalApproved && !tr.paid){ unpaid++; attention.push({tag:'Unpaid',cls:'await',title:tr.title,sub:loc+'  ·  final approved but not yet marked paid'}); }
       if(a.artApproved) coversApproved++;
       if(tr.raw==='received'){ rawToAccept++; attention.push({tag:tr.fromClient?'New from client':'To approve',cls:'await',title:tr.title,sub:loc+(tr.fromClient?'  ·  sent in by the client — listen and approve the quality to send it into production':'  ·  raw recording is in — approve the quality to send it into production')}); }
       if(tr.raw==='rerecord') attention.push({tag:'Re-record',cls:'alert',title:tr.title,sub:loc+'  ·  flagged for re-record'});
@@ -1397,7 +1401,7 @@
     var st=steps(tr), lab=statusLabel(tr);
     if(vr()==='admin' && tr.fromClient && tr.raw==='received') lab=['New from client · to review','await'];   // the client sent this in themselves
     if(vr()==='admin' && readyForFinal(tr)) lab=['Ready to produce final','await'];   // your cue: vocal approved, music chosen, details in
-    if(vr()==='admin' && tr.final && appr(tr.id).finalApproved && !tr.paid) lab=['Complete — unpaid','alert'];   // easy to scan for payment still owed
+    var unpaidBadge = (vr()==='admin' && tr.final && appr(tr.id).finalApproved && !tr.paid) ? ' <span class="r-unpaid">Unpaid</span>' : '';   // gentle flag, doesn't override the status colour itself
     function stepHtml(cls,label,num,tip){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
     // Vocal tooltip must reflect the real state — never claim a recording is in / approved when it isn't.
     var hasRaw = !!(tr.audio && tr.audio.raw);
@@ -1408,11 +1412,15 @@
     var row=document.createElement('div');row.className='row';
     // cover thumbnail to the left of the title, like a music list. The client only sees it once the cover is ready for them; otherwise a quiet placeholder keeps titles aligned.
     var showCover = !!(tr.cover && (vr()==='admin' || tr.art));
-    var thumb = showCover ? '<img class="r-thumb" src="media/'+encodeURIComponent(tr.cover)+'" alt="" loading="lazy" decoding="async">' : '<div class="r-thumb r-thumb-empty" aria-hidden="true">&#9834;</div>';
-    // quick download of the final master straight from the list — admin only, no need to expand the recording first
+    var thumbInner = showCover ? '<img class="r-thumb" src="media/'+encodeURIComponent(tr.cover)+'" alt="" loading="lazy" decoding="async">' : '<div class="r-thumb r-thumb-empty" aria-hidden="true">&#9834;</div>';
+    // play/download live on the cover art itself, on hover — admin only, keeps the row layout untouched
     var canDownload = vr()==='admin' && tr.audio && tr.audio.final;
-    var dl = canDownload ? '<a class="r-download" href="audio/'+encodeURIComponent(tr.audio.final)+'" download title="Download final master">&#8681;</a>' : '';
-    row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+'</div></div>'
+    var thumbHover = canDownload ? '<div class="r-thumb-hover">'
+        +'<button type="button" class="r-thumb-btn" data-play title="Preview the final master">&#9654;</button>'
+        +'<a class="r-thumb-btn" href="audio/'+encodeURIComponent(tr.audio.final)+'" download title="Download final master">&#8681;</a>'
+      +'</div>' : '';
+    var thumb = '<div class="r-thumb-wrap">'+thumbInner+thumbHover+'</div>';
+    row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+unpaidBadge+'</div></div>'
       +'<div class="tracker">'
         +stepHtml(st.raw,'Vocal',1,rawTip)
         +stepHtml(st.cleaned,'Produced',2,"Craig's cleaned, produced version of your vocal. Approve it or request a change.")
@@ -1420,12 +1428,14 @@
         +stepHtml(st.details,'Details',4,"Confirm the title, artist, album, genre and year that go into your finished file.")
         +stepHtml(st.art,'Cover',5,"Your cover artwork — upload your own or approve the studio-created design.")
         +stepHtml(st.final,'Final',6,"The finished master. Approve it and complete your purchase.")
-      +'</div>'+dl+'<div class="chev">▶</div>';
+      +'</div><div class="chev">▶</div>';
     var expand=document.createElement('div');expand.className='expand';
     wrap.appendChild(row);wrap.appendChild(expand);
     var built=openIds[tr.id]; if(built) buildExpand(tr,expand);
-    var dlLink=row.querySelector('.r-download');
-    if(dlLink) dlLink.addEventListener('click',function(ev){ ev.stopPropagation(); });
+    if(canDownload){
+      row.querySelector('.r-thumb-wrap').addEventListener('click',function(ev){ ev.stopPropagation(); });   // only intercept clicks when there's actually a play/download popover to protect
+      row.querySelector('[data-play]').addEventListener('click',function(){ new Audio('audio/'+encodeURIComponent(tr.audio.final)).play(); });
+    }
     row.addEventListener('click',function(){
       if(!expand.innerHTML) buildExpand(tr,expand);
       var open=wrap.classList.toggle('open'); openIds[tr.id]=open?1:0;
