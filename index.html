@@ -139,6 +139,8 @@
   .step::before{content:"";position:absolute;top:7px;left:-33px;width:66px;height:2px;background:var(--lock);z-index:1}
   .step:first-child::before{display:none}
   .step.on-line::before{background:var(--done)}
+  .r-download{color:var(--muted);font-size:17px;flex:0 0 auto;text-decoration:none;padding:4px 6px;border-radius:6px}
+  .r-download:hover{color:var(--gold);background:var(--await-bg)}
   .chev{color:var(--muted);font-size:13px;transition:transform .2s;flex:0 0 auto}
   .track.open .chev{transform:rotate(90deg)}
 
@@ -1202,11 +1204,12 @@
   // ---- admin dashboard (basic) ----
   function renderDashboard(){
     var tracks=allTracks();
-    var total=tracks.length, finalApproved=0, coversApproved=0, awaitingClient=0, rawToAccept=0, readyFinal=0;
+    var total=tracks.length, finalApproved=0, coversApproved=0, awaitingClient=0, rawToAccept=0, readyFinal=0, unpaid=0;
     var attention=[];
     tracks.forEach(function(x){
       var tr=x.t, a=appr(tr.id), loc=x.sub?x.cat+' / '+x.sub:x.cat;
       if(a.finalApproved) finalApproved++;
+      if(a.finalApproved && !tr.paid){ unpaid++; attention.push({tag:'Unpaid',cls:'alert',title:tr.title,sub:loc+'  ·  final approved but not yet marked paid'}); }
       if(a.artApproved) coversApproved++;
       if(tr.raw==='received'){ rawToAccept++; attention.push({tag:tr.fromClient?'New from client':'To approve',cls:'await',title:tr.title,sub:loc+(tr.fromClient?'  ·  sent in by the client — listen and approve the quality to send it into production':'  ·  raw recording is in — approve the quality to send it into production')}); }
       if(tr.raw==='rerecord') attention.push({tag:'Re-record',cls:'alert',title:tr.title,sub:loc+'  ·  flagged for re-record'});
@@ -1219,7 +1222,7 @@
         var n=a[p[0]+'Note']; if(n) attention.push({tag:'Change',cls:'note',title:tr.title,sub:'['+p[1]+']  '+n});
       });
     });
-    var cards=[['Recordings',total,''],['Awaiting you',rawToAccept,'attn'],['Ready for final',readyFinal,'attn'],['Awaiting client',awaitingClient,''],['Final approved',finalApproved,''],['Covers approved',coversApproved,'']];
+    var cards=[['Recordings',total,''],['Awaiting you',rawToAccept,'attn'],['Ready for final',readyFinal,'attn'],['Awaiting client',awaitingClient,''],['Final approved',finalApproved,''],['Unpaid',unpaid,unpaid?'attn':''],['Covers approved',coversApproved,'']];
     var ch='<div class="dash-cards">';
     cards.forEach(function(c){ ch+='<div class="dash-card '+c[2]+'"><div class="dc-num">'+c[1]+'</div><div class="dc-lbl">'+c[0]+'</div></div>'; });
     ch+='</div>';
@@ -1394,6 +1397,7 @@
     var st=steps(tr), lab=statusLabel(tr);
     if(vr()==='admin' && tr.fromClient && tr.raw==='received') lab=['New from client · to review','await'];   // the client sent this in themselves
     if(vr()==='admin' && readyForFinal(tr)) lab=['Ready to produce final','await'];   // your cue: vocal approved, music chosen, details in
+    if(vr()==='admin' && tr.final && appr(tr.id).finalApproved && !tr.paid) lab=['Complete — unpaid','alert'];   // easy to scan for payment still owed
     function stepHtml(cls,label,num,tip){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
     // Vocal tooltip must reflect the real state — never claim a recording is in / approved when it isn't.
     var hasRaw = !!(tr.audio && tr.audio.raw);
@@ -1405,6 +1409,9 @@
     // cover thumbnail to the left of the title, like a music list. The client only sees it once the cover is ready for them; otherwise a quiet placeholder keeps titles aligned.
     var showCover = !!(tr.cover && (vr()==='admin' || tr.art));
     var thumb = showCover ? '<img class="r-thumb" src="media/'+encodeURIComponent(tr.cover)+'" alt="" loading="lazy" decoding="async">' : '<div class="r-thumb r-thumb-empty" aria-hidden="true">&#9834;</div>';
+    // quick download of the final master straight from the list — admin only, no need to expand the recording first
+    var canDownload = vr()==='admin' && tr.audio && tr.audio.final;
+    var dl = canDownload ? '<a class="r-download" href="audio/'+encodeURIComponent(tr.audio.final)+'" download title="Download final master">&#8681;</a>' : '';
     row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+'</div></div>'
       +'<div class="tracker">'
         +stepHtml(st.raw,'Vocal',1,rawTip)
@@ -1413,10 +1420,12 @@
         +stepHtml(st.details,'Details',4,"Confirm the title, artist, album, genre and year that go into your finished file.")
         +stepHtml(st.art,'Cover',5,"Your cover artwork — upload your own or approve the studio-created design.")
         +stepHtml(st.final,'Final',6,"The finished master. Approve it and complete your purchase.")
-      +'</div><div class="chev">▶</div>';
+      +'</div>'+dl+'<div class="chev">▶</div>';
     var expand=document.createElement('div');expand.className='expand';
     wrap.appendChild(row);wrap.appendChild(expand);
     var built=openIds[tr.id]; if(built) buildExpand(tr,expand);
+    var dlLink=row.querySelector('.r-download');
+    if(dlLink) dlLink.addEventListener('click',function(ev){ ev.stopPropagation(); });
     row.addEventListener('click',function(){
       if(!expand.innerHTML) buildExpand(tr,expand);
       var open=wrap.classList.toggle('open'); openIds[tr.id]=open?1:0;
