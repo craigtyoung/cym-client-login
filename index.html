@@ -175,7 +175,6 @@
   .choose-btn.on{background:var(--done);color:#fff}
   .choose-btn:disabled{opacity:.5;cursor:default}
   /* Final metadata + dual approve */
-  .dual-approve{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
   .meta-form{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
   .meta-form input{font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px}
   .meta-form .full{grid-column:1 / -1}
@@ -1749,35 +1748,32 @@
     return el;
   }
 
-  // Stage 5 — Final Production: dual approval (levels + wording) + client metadata; pay unlocks when both approved.
+  // Stage 5 — Final Production: single client approval (wording was already locked at raw upload) + client metadata; pay unlocks once approved.
   function finalStage(tr,num){
     var a=appr(tr.id), ready=!!tr.final, file=tr.audio.final;
-    var levels=!!a.levelsApproved, wording=!!a.wordingApproved, approved=levels&&wording;
+    var approved=!!a.finalApproved;   // wording was already locked in when the client sent the raw recording — one approval covers the finished master
     var chip = !ready?['lock','In progress']:(approved?['done','Approved']:['await','Awaiting client']);
-    var el=stageEl(num,'Final Production',chip[0],chip[1],"The finished master. Approve the levels and the wording, then complete your purchase.");
+    var el=stageEl(num,'Final Production',chip[0],chip[1],"The finished master. Approve it and complete your purchase.");
 
     if(ready){
       el.insertAdjacentHTML('beforeend',audioHtml(file));
       if(vr()==='client'){ var pnvF=producerNoteView(tr,'final'); if(pnvF) el.appendChild(pnvF); }
       if(vr()==='client'){
-        var dual=document.createElement('div');dual.className='dual-approve';
-        dual.innerHTML='<button class="approve-btn'+(levels?' on':'')+'" data-lev>'+(levels?'Levels approved ✓':'Approve levels')+'</button>'
-          +'<button class="approve-btn'+(wording?' on':'')+'" data-word>'+(wording?'Wording approved ✓':'Approve wording')+'</button>'
-          +'<button class="note-toggle" data-notet>Request a change</button>';
-        el.appendChild(dual);
+        var actions=document.createElement('div');actions.className='stage-actions';
+        actions.innerHTML='<button class="approve-btn'+(approved?' on':'')+'" data-approve>'+(approved?'Approved ✓':'Approve final master')+'</button><button class="note-toggle" data-notet>Request a change</button>';
+        el.appendChild(actions);
         var nb=document.createElement('textarea');nb.className='note-box'+((a.finalNote)?' open':'');nb.placeholder='What would you like changed?';nb.value=a.finalNote||'';
         el.appendChild(nb);
-        dual.querySelector('[data-notet]').addEventListener('click',function(){ nb.classList.toggle('open'); if(nb.classList.contains('open')) nb.focus(); });
+        actions.querySelector('[data-notet]').addEventListener('click',function(){ nb.classList.toggle('open'); if(nb.classList.contains('open')) nb.focus(); });
         if(!PREVIEW){
-          dual.querySelector('[data-lev]').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:'levels',approved:!levels}).then(reloadKeepOpen); });
-          dual.querySelector('[data-word]').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:'wording',approved:!wording}).then(reloadKeepOpen); });
+          actions.querySelector('[data-approve]').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:'final',approved:!approved}).then(reloadKeepOpen); });
           nb.addEventListener('change',function(){ api('POST','/api/note',{trackId:tr.id,stage:'final',note:nb.value.trim()}).then(function(){ a.finalNote=nb.value.trim(); refreshBar(); }); });
         } else {
-          dual.querySelectorAll('button').forEach(function(b){ b.disabled=true; });
+          actions.querySelectorAll('button').forEach(function(b){ b.disabled=true; });
           nb.readOnly=true;
         }
       } else {
-        el.insertAdjacentHTML('beforeend','<div class="uling" style="margin-top:8px">Client approvals — levels '+(levels?'✓':'—')+' · wording '+(wording?'✓':'—')+'</div>');
+        el.insertAdjacentHTML('beforeend','<div class="uling" style="margin-top:8px">Client approval — '+(approved?'✓ approved':'awaiting approval')+'</div>');
         if(a.finalNote) el.insertAdjacentHTML('beforeend','<div class="client-note-view"><b>Client note:</b> '+esc(a.finalNote)+'</div>');
       }
     } else {
@@ -1796,7 +1792,7 @@
           +(tr.paid?' <span class="uling">'+esc(tr.paidVia||'')+(tr.paidAt?' · '+new Date(tr.paidAt).toLocaleDateString():'')+'</span>'
                    :(tr.paidFlagged?' <span class="uling" style="color:var(--gold)">Client says they sent payment</span>':''))
         +'</div>';
-      ab.querySelector('[data-file-row]').appendChild(fileControl({tr:tr,stage:'final',cur:file,warn:(levels||wording)?REPLACE_WARN:'',removeWarn:REMOVE_WARN}));
+      ab.querySelector('[data-file-row]').appendChild(fileControl({tr:tr,stage:'final',cur:file,warn:approved?REPLACE_WARN:'',removeWarn:REMOVE_WARN}));
       var readyCb=ab.querySelector('[data-ready]');
       readyCb.addEventListener('change',function(){ api('POST','/api/track/'+tr.id,{final:readyCb.checked}).then(reloadKeepOpen); });
       var payUrlEl=ab.querySelector('[data-payurl]'), payLabelEl=ab.querySelector('[data-paylabel]'), paidCb=ab.querySelector('[data-paid]');

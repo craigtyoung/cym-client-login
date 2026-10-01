@@ -456,6 +456,18 @@ app.post('/api/track/:id', requireAdmin, function(req,res){
   const p = req.body||{};
   if(p.raw!=null && RAW_STATUSES.indexOf(p.raw)>=0) tr.raw=p.raw;
   ['cleaned','music','final','art'].forEach(function(k){ if(p[k]!=null) tr[k]=!!p[k]; });
+  if(p.final===true){
+    // marking the final master ready implies every earlier production stage already happened — backfill
+    // the gaps so the pipeline doesn't show stale locked/awaiting dots for a recording that's actually done.
+    if(!tr.cleaned) tr.cleaned=true;
+    if(!tr.music) tr.music=true;
+    if(!tr.art) tr.art=true;
+    var a=proj.approvals[tr.id]||(proj.approvals[tr.id]={});
+    if(!a.cleanedApproved) a.cleanedApproved=true;
+    if(!a.musicSeen) a.musicSeen=true;
+    if(!a.artApproved) a.artApproved=true;
+    if(!a.detailsConfirmed) a.detailsConfirmed=true;
+  }
   if(p.title!=null) tr.title = String(p.title).slice(0,200);
   ['note'].forEach(function(k){ if(p[k]!=null) tr[k]=String(p[k]).slice(0,300); });
   if(p.description!=null) tr.description = String(p.description).slice(0,2000);
