@@ -1443,11 +1443,19 @@
     var built=openIds[tr.id]; if(built) buildExpand(tr,expand);
     if(canDownload){
       row.querySelector('.r-thumb-wrap').addEventListener('click',function(ev){ ev.stopPropagation(); });   // only intercept clicks when there's actually a play/download popover to protect
-      row.querySelector('[data-play]').addEventListener('click',function(){
+      var playBtn=row.querySelector('[data-play]'), rowAudio=null;
+      function setPlayIcon(playing){ playBtn.innerHTML = playing ? '&#9208;' : '&#9654;'; }
+      playBtn.addEventListener('click',function(){
+        if(rowAudio && !rowAudio.paused){ rowAudio.pause(); return; }   // second click pauses instead of restarting
+        if(!rowAudio){
+          rowAudio=new Audio('audio/'+encodeURIComponent(tr.audio.final));
+          rowAudio.addEventListener('play',function(){ setPlayIcon(true); });
+          rowAudio.addEventListener('pause',function(){ setPlayIcon(false); });
+          rowAudio.addEventListener('ended',function(){ setPlayIcon(false); });
+        }
         __stopActiveAudio();
-        var a=new Audio('audio/'+encodeURIComponent(tr.audio.final));
-        __activeAudio=a;
-        a.play();
+        __activeAudio=rowAudio;
+        rowAudio.play();
       });
     }
     row.addEventListener('click',function(){
@@ -1611,6 +1619,11 @@
     var el=stageEl(num||'4','Cover Art',chip[0],chip[1],"Your cover artwork — upload your own or approve the studio-created design.");
     if(ready){
       el.insertAdjacentHTML('beforeend', file?'<img class="cover-img" src="media/'+encodeURIComponent(file)+'" alt="cover artwork" />':'<div class="no-cover">No cover uploaded yet.</div>');
+      if(file){
+        var dlRow=document.createElement('div');dlRow.className='stage-actions';
+        dlRow.innerHTML='<a class="mini-btn ghost" href="media/'+encodeURIComponent(file)+'" download>Download cover art</a>';
+        el.appendChild(dlRow);
+      }
       if(vr()==='client'){ var pnvA=producerNoteView(tr,'art'); if(pnvA) el.appendChild(pnvA); }
       if(vr()==='client'){
         var actions=document.createElement('div');actions.className='stage-actions';
