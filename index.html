@@ -411,6 +411,16 @@
   // effective view-role: admin can preview the client experience without logging out
   function vr(){ return PREVIEW ? 'client' : ROLE; }
 
+  // ---- single-playback coordination: starting any preview pauses whatever else was playing
+  var __activeAudio=null;
+  function __stopActiveAudio(except){
+    if(__activeAudio && __activeAudio!==except){ try{ __activeAudio.pause(); }catch(e){} }
+  }
+  document.addEventListener('play',function(ev){
+    var el=ev.target;
+    if(el && el.tagName==='AUDIO'){ __stopActiveAudio(el); __activeAudio=el; }
+  },true);
+
   // ---- api helpers
   function api(method,url,body){
     return fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined})
@@ -1433,7 +1443,12 @@
     var built=openIds[tr.id]; if(built) buildExpand(tr,expand);
     if(canDownload){
       row.querySelector('.r-thumb-wrap').addEventListener('click',function(ev){ ev.stopPropagation(); });   // only intercept clicks when there's actually a play/download popover to protect
-      row.querySelector('[data-play]').addEventListener('click',function(){ new Audio('audio/'+encodeURIComponent(tr.audio.final)).play(); });
+      row.querySelector('[data-play]').addEventListener('click',function(){
+        __stopActiveAudio();
+        var a=new Audio('audio/'+encodeURIComponent(tr.audio.final));
+        __activeAudio=a;
+        a.play();
+      });
     }
     row.addEventListener('click',function(){
       if(!expand.innerHTML) buildExpand(tr,expand);
