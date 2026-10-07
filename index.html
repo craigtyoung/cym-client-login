@@ -1410,7 +1410,10 @@
     var st=steps(tr), lab=statusLabel(tr);
     if(vr()==='admin' && tr.fromClient && tr.raw==='received') lab=['New from client · to review','await'];   // the client sent this in themselves
     if(vr()==='admin' && readyForFinal(tr)) lab=['Ready to produce final','await'];   // your cue: vocal approved, music chosen, details in
-    var paymentBadge = (vr()==='admin' && tr.final && appr(tr.id).finalApproved) ? (tr.paid ? ' <span class="r-paid">Paid</span>' : ' <span class="r-unpaid">Unpaid</span>') : '';   // gentle flag either way, doesn't override the status colour itself
+    // Paid shows regardless of approval status (payment can land before or after the client clicks approve) and to both roles.
+    // Unpaid stays admin-only and only once approved — before that there's nothing actionable to flag, and the client doesn't need the nudge.
+    var paymentBadge = tr.final && tr.paid ? ' <span class="r-paid">Paid</span>'
+      : (vr()==='admin' && tr.final && appr(tr.id).finalApproved && !tr.paid) ? ' <span class="r-unpaid">Unpaid</span>' : '';
     function stepHtml(cls,label,num,tip){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
     // Vocal tooltip must reflect the real state — never claim a recording is in / approved when it isn't.
     var hasRaw = !!(tr.audio && tr.audio.raw);
