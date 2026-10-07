@@ -547,6 +547,8 @@
 
   // ---- model helpers
   function appr(id){ return D.approvals[id] || {}; }
+  // Paid is the strongest signal of done — it can land before or instead of the client clicking Approve, and should still read as Complete.
+  function isComplete(tr){ return !!(tr.paid || (tr.final && appr(tr.id).finalApproved)); }
   // Track Details: done once the client confirmed them (or, for older data, once a title was saved)
   function detailsDone(a){ return !!(a && (a.detailsConfirmed || (a.metadata && a.metadata.title))); }
   // everything the final master depends on is in: vocal approved, music chosen, details confirmed (and not already produced)
@@ -574,11 +576,11 @@
   function statusLabel(tr){
     var a=appr(tr.id);
     if(tr.raw==='rerecord') return ['Re-record requested','alert'];
-    if(tr.final && a.finalApproved) return ['Complete','done'];
-    if(tr.final && !a.finalApproved) return ['Final ready for approval','await'];
+    if(isComplete(tr)) return ['Complete','done'];
+    if(tr.final && !a.finalApproved) return ['Ready for final approval','await'];
     if(tr.cleaned && !a.cleanedApproved) return ['Vocal ready for approval','await'];
     if(tr.cleaned && a.cleanedApproved) return ['In production — music & final','neutral'];
-    if(tr.raw==='accepted') return ['Approved — in production','neutral'];
+    if(tr.raw==='accepted') return ['In production','neutral'];
     if(tr.raw==='none') return ['Not received','neutral'];
     return ['Received','neutral'];
   }
@@ -1228,7 +1230,7 @@
       if(tr.raw==='rerecord') attention.push({tag:'Re-record',cls:'alert',title:tr.title,sub:loc+'  ·  flagged for re-record'});
       if(tr.cleaned && !a.cleanedApproved) awaitingClient++;
       if(tr.cleaned && !detailsDone(a)) awaitingClient++;
-      if(tr.final && !a.finalApproved) awaitingClient++;
+      if(tr.final && !a.finalApproved && !tr.paid) awaitingClient++;
       if(tr.art && !a.artApproved) awaitingClient++;
       if(readyForFinal(tr)){ readyFinal++; attention.push({tag:'Produce final',cls:'await',title:tr.title,sub:loc+'  ·  vocal approved, music chosen and details confirmed: ready for you to produce the final master'}); }
       [['cleaned','Vocal'],['music','Music'],['final','Final'],['art','Cover']].forEach(function(p){
@@ -1403,10 +1405,16 @@
     b.addEventListener('click',function(){ FILTER=filter; render(); window.scrollTo({top:0,behavior:'smooth'}); });
     nav.appendChild(b);
   }
-  function listEl(tracks){ var l=document.createElement('div');l.className='list'; tracks.forEach(function(tr){ l.appendChild(trackEl(tr)); }); return l; }
+  // Complete recordings float to the top of each group automatically; everything else keeps its original order (stable sort).
+  function listEl(tracks){
+    var l=document.createElement('div');l.className='list';
+    var sorted=tracks.slice().sort(function(a,b){ return (isComplete(a)?0:1)-(isComplete(b)?0:1); });
+    sorted.forEach(function(tr){ l.appendChild(trackEl(tr)); });
+    return l;
+  }
 
   function trackEl(tr){
-    var wrap=document.createElement('div');wrap.className='track'+(appr(tr.id).finalApproved?' complete':'')+(openIds[tr.id]?' open':'');
+    var wrap=document.createElement('div');wrap.className='track'+(isComplete(tr)?' complete':'')+(openIds[tr.id]?' open':'');
     var st=steps(tr), lab=statusLabel(tr);
     if(vr()==='admin' && tr.fromClient && tr.raw==='received') lab=['New from client · to review','await'];   // the client sent this in themselves
     if(vr()==='admin' && readyForFinal(tr)) lab=['Ready to produce final','await'];   // your cue: vocal approved, music chosen, details in
