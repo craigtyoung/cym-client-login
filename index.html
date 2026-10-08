@@ -1433,11 +1433,13 @@
     // cover thumbnail to the left of the title, like a music list. The client only sees it once the cover is ready for them; otherwise a quiet placeholder keeps titles aligned.
     var showCover = !!(tr.cover && (vr()==='admin' || tr.art));
     var thumbInner = showCover ? '<img class="r-thumb" src="media/'+encodeURIComponent(tr.cover)+'" alt="" loading="lazy" decoding="async">' : '<div class="r-thumb r-thumb-empty" aria-hidden="true">&#9834;</div>';
-    // play/download live on the cover art itself, on hover — admin always, client once paid. Keeps the row layout untouched either way.
-    var canDownload = !!(tr.audio && tr.audio.final) && (vr()==='admin' || tr.paid);
-    var thumbHover = canDownload ? '<div class="r-thumb-hover">'
+    // Preview lives on the cover art itself, on hover — open to both roles once a final master exists. Download from
+    // here stays admin-only; the client's download lives in Final Production instead, gated on payment there.
+    var hasFinalFile = !!(tr.audio && tr.audio.final);
+    var canDownload = hasFinalFile && vr()==='admin';
+    var thumbHover = hasFinalFile ? '<div class="r-thumb-hover">'
         +'<button type="button" class="r-thumb-btn" data-play title="Preview the final master">&#9654;</button>'
-        +'<a class="r-thumb-btn" href="audio/'+encodeURIComponent(tr.audio.final)+'" download title="Download final master">&#8681;</a>'
+        +(canDownload ? '<a class="r-thumb-btn" href="audio/'+encodeURIComponent(tr.audio.final)+'" download title="Download final master">&#8681;</a>' : '')
       +'</div>' : '';
     var thumb = '<div class="r-thumb-wrap">'+thumbInner+thumbHover+'</div>';
     row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+paymentBadge+'</div></div>'
@@ -1450,7 +1452,7 @@
     var expand=document.createElement('div');expand.className='expand';
     wrap.appendChild(row);wrap.appendChild(expand);
     var built=openIds[tr.id]; if(built) buildExpand(tr,expand);
-    if(canDownload){
+    if(hasFinalFile){
       row.querySelector('.r-thumb-wrap').addEventListener('click',function(ev){ ev.stopPropagation(); });   // only intercept clicks when there's actually a play/download popover to protect
       var playBtn=row.querySelector('[data-play]'), rowAudio=null;
       function setPlayIcon(playing){ playBtn.innerHTML = playing ? '&#9208;' : '&#9654;'; }
@@ -1479,7 +1481,9 @@
     el.innerHTML='<div class="stage-head"><div class="stage-num">'+num+'</div><div class="stage-name" title="'+esc(tip||'')+'">'+esc(name)+(tip?' <span class="stage-info" title="'+esc(tip)+'">ⓘ</span>':'')+'</div><div class="stage-chip '+chipCls+'">'+chipText+'</div></div>';
     return el;
   }
-  function audioHtml(f){ return f?'<audio controls preload="none" src="audio/'+encodeURIComponent(f)+'"></audio>':'<div class="no-audio">No preview uploaded yet.</div>'; }
+  // controlsList="nodownload" hides the browser's own download option in the player's built-in menu (Chrome/Edge) — the
+  // app's own gated download control is the one real path, not the native player's overflow menu.
+  function audioHtml(f){ return f?'<audio controls controlsList="nodownload noremoteplayback" preload="none" src="audio/'+encodeURIComponent(f)+'"></audio>':'<div class="no-audio">No preview uploaded yet.</div>'; }
 
   function buildExpand(tr,expand){
     expand.innerHTML='';
@@ -1801,6 +1805,14 @@
 
     if(ready){
       el.insertAdjacentHTML('beforeend',audioHtml(file));
+      if(vr()==='client'){
+        // The one real download path for the client — the player itself has its native download hidden (see audioHtml).
+        var dlRow=document.createElement('div');dlRow.className='stage-actions';
+        dlRow.innerHTML = tr.paid
+          ? '<a class="mini-btn ghost" href="audio/'+encodeURIComponent(file)+'" download>Download final master</a>'
+          : '<span class="mini-btn ghost off" title="Available once your payment is confirmed">Download final master</span>';
+        el.appendChild(dlRow);
+      }
       if(vr()==='client'){ var pnvF=producerNoteView(tr,'final'); if(pnvF) el.appendChild(pnvF); }
       if(vr()==='client'){
         var actions=document.createElement('div');actions.className='stage-actions';
@@ -1816,7 +1828,6 @@
         el.appendChild(actions);
         var nb=document.createElement('textarea');nb.className='note-box'+((a.finalNote)?' open':'');nb.placeholder='What would you like changed?';nb.value=a.finalNote||'';
         el.appendChild(nb);
-        // Download itself lives on the thumbnail hover in the list row (same spot admin already uses) once paid — not duplicated here to avoid clutter.
         actions.querySelector('[data-notet]').addEventListener('click',function(){ nb.classList.toggle('open'); if(nb.classList.contains('open')) nb.focus(); });
         if(!PREVIEW){
           actions.querySelectorAll('[data-check]').forEach(function(btn){
