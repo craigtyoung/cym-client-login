@@ -551,12 +551,12 @@
   function isComplete(tr){ return !!(tr.paid || (tr.final && appr(tr.id).finalApproved)); }
   // Track Details: done once the client confirmed them (or, for older data, once a title was saved)
   function detailsDone(a){ return !!(a && (a.detailsConfirmed || (a.metadata && a.metadata.title))); }
-  // everything the final master depends on is in: vocal approved, music chosen, details confirmed (and not already produced)
-  function readyForFinal(tr){ var a=appr(tr.id); return !!(a.cleanedApproved && a.musicSeen && detailsDone(a) && !tr.final); }
+  // everything the final master depends on is in: recording approved, details confirmed — Craig produces the music and vocal himself (not already produced)
+  function readyForFinal(tr){ var a=appr(tr.id); return !!(tr.raw==='accepted' && detailsDone(a) && !tr.final); }
   // what the details form starts with: the saved values, else the recording title + project defaults
   function detailsStart(tr){
     var m=appr(tr.id).metadata||{}, d=(D.project&&D.project.metaDefaults)||{};
-    return { title:m.title||tr.title, artist:m.artist||d.artist||D.client.name||'', album:m.album||d.album||D.project.name||'', genre:m.genre||d.genre||'', year:m.year||d.year||String(new Date().getFullYear()) };
+    return { title:m.title||tr.title, artist:m.artist||d.artist||D.client.name||'', album:m.album||d.album||D.project.name||'', genre:m.genre||d.genre||'', year:m.year||d.year||String(new Date().getFullYear()), copyright:m.copyright||d.copyright||'', copyrightUrl:m.copyrightUrl||d.copyrightUrl||'' };
   }
   function eachCat(fn){ D.categories.forEach(fn); }
   function catTracks(cat){ return cat.subcategories?cat.subcategories.reduce(function(a,s){return a.concat(s.tracks);},[]):cat.tracks; }
@@ -565,14 +565,12 @@
   function steps(tr){
     var a=appr(tr.id);
     // Once a recording is Complete, every stage reads as done — no per-stage auditing of a finished, paid piece.
-    if(isComplete(tr) && tr.raw!=='rerecord') return { raw:'done', cleaned:'done', music:'done', details:'done', final:'done', art:'done' };
+    if(isComplete(tr) && tr.raw!=='rerecord') return { raw:'done', details:'done', art:'done', final:'done' };
     return {
       raw: tr.raw==='rerecord'?'alert':(tr.raw==='accepted'?'done':'neutral'),
-      cleaned: !tr.cleaned?'lock':(a.cleanedApproved?'done':'await'),
-      music: !tr.music?'lock':(a.musicSeen?'done':'await'),
-      details: !tr.cleaned?'lock':(detailsDone(a)?'done':'await'),
-      final: !tr.final?'lock':(a.finalApproved?'done':'await'),
-      art: !tr.art?'lock':(a.artApproved?'done':'await')
+      details: tr.raw!=='accepted'?'lock':(detailsDone(a)?'done':'await'),
+      art: !tr.art?'lock':(a.artApproved?'done':'await'),
+      final: !tr.final?'lock':(a.finalApproved?'done':'await')
     };
   }
   function statusLabel(tr){
@@ -580,8 +578,7 @@
     if(tr.raw==='rerecord') return ['Re-record requested','alert'];
     if(isComplete(tr)) return ['Complete','done'];
     if(tr.final && !a.finalApproved) return ['Ready for final approval','await'];
-    if(tr.cleaned && !a.cleanedApproved) return ['Vocal ready for approval','await'];
-    if(tr.cleaned && a.cleanedApproved) return ['In production — music & final','neutral'];
+    if(tr.raw==='accepted' && !detailsDone(a)) return ['Awaiting track details','await'];
     if(tr.raw==='accepted') return ['In production','neutral'];
     if(tr.raw==='none') return ['Not received','neutral'];
     return ['Received','neutral'];
@@ -1200,6 +1197,8 @@
       +'<input id="stMdAlbum" placeholder="Album / collection" value="'+esc((D.project.metaDefaults||{}).album||'')+'" />'
       +'<input id="stMdGenre" placeholder="Genre" value="'+esc((D.project.metaDefaults||{}).genre||'')+'" />'
       +'<input id="stMdYear" placeholder="Year" value="'+esc((D.project.metaDefaults||{}).year||'')+'" />'
+      +'<input id="stMdCopyright" placeholder="Copyright (e.g. © 2026 Name)" value="'+esc((D.project.metaDefaults||{}).copyright||'')+'" />'
+      +'<input id="stMdCopyrightUrl" placeholder="Copyright website" value="'+esc((D.project.metaDefaults||{}).copyrightUrl||'')+'" />'
       +'<div class="sec-note" style="margin:0">Payment links and prices are set per recording, in that recording&rsquo;s Final Production admin box.</div>'
       +'<div><button class="mini-btn" id="stSave">Save settings</button></div>'
       +'</div><div class="acct-msg" id="stMsg"></div>';
@@ -1211,7 +1210,7 @@
       var msg=document.getElementById('stMsg');
       var nameVal=document.getElementById('stName').value.trim(), introVal=document.getElementById('stIntro').value, prepVal=document.getElementById('stPrep').value.trim();
       var subVal=document.getElementById('stSub').value.trim();
-      var mdVal={artist:document.getElementById('stMdArtist').value.trim(),album:document.getElementById('stMdAlbum').value.trim(),genre:document.getElementById('stMdGenre').value.trim(),year:document.getElementById('stMdYear').value.trim()};
+      var mdVal={artist:document.getElementById('stMdArtist').value.trim(),album:document.getElementById('stMdAlbum').value.trim(),genre:document.getElementById('stMdGenre').value.trim(),year:document.getElementById('stMdYear').value.trim(),copyright:document.getElementById('stMdCopyright').value.trim(),copyrightUrl:document.getElementById('stMdCopyrightUrl').value.trim()};
       api('POST','/api/project-update',{projectId:D.project.id,name:nameVal,intro:introVal,preparedBy:prepVal,subtitle:subVal,metaDefaults:mdVal})
         .then(function(){ if(nameVal) D.project.name=nameVal; D.project.intro=introVal; D.project.preparedBy=prepVal; D.project.subtitle=subVal; D.project.metaDefaults=mdVal; applyProjectChrome(); msg.className='acct-msg ok'; msg.textContent='Saved.'; })
         .catch(function(e){ msg.className='acct-msg err'; msg.textContent=(e&&e.error)||'Failed'; });
@@ -1230,12 +1229,11 @@
       if(a.artApproved) coversApproved++;
       if(tr.raw==='received'){ rawToAccept++; attention.push({tag:tr.fromClient?'New from client':'To approve',cls:'await',title:tr.title,sub:loc+(tr.fromClient?'  ·  sent in by the client — listen and approve the quality to send it into production':'  ·  raw recording is in — approve the quality to send it into production')}); }
       if(tr.raw==='rerecord') attention.push({tag:'Re-record',cls:'alert',title:tr.title,sub:loc+'  ·  flagged for re-record'});
-      if(tr.cleaned && !a.cleanedApproved) awaitingClient++;
-      if(tr.cleaned && !detailsDone(a)) awaitingClient++;
+      if(tr.raw==='accepted' && !detailsDone(a)) awaitingClient++;
       if(tr.final && !a.finalApproved && !tr.paid) awaitingClient++;
       if(tr.art && !a.artApproved) awaitingClient++;
-      if(readyForFinal(tr)){ readyFinal++; attention.push({tag:'Produce final',cls:'await',title:tr.title,sub:loc+'  ·  vocal approved, music chosen and details confirmed: ready for you to produce the final master'}); }
-      [['cleaned','Vocal'],['music','Music'],['final','Final'],['art','Cover']].forEach(function(p){
+      if(readyForFinal(tr)){ readyFinal++; attention.push({tag:'Produce final',cls:'await',title:tr.title,sub:loc+'  ·  recording approved and details confirmed: ready for you to produce the final master'}); }
+      [['final','Final'],['art','Cover']].forEach(function(p){
         var n=a[p[0]+'Note']; if(n) attention.push({tag:'Change',cls:'note',title:tr.title,sub:'['+p[1]+']  '+n});
       });
     });
@@ -1445,11 +1443,9 @@
     row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+paymentBadge+'</div></div>'
       +'<div class="tracker">'
         +stepHtml(st.raw,'Vocal',1,rawTip)
-        +stepHtml(st.cleaned,'Produced',2,"Craig's cleaned, produced version of your vocal. Approve it or request a change.")
-        +stepHtml(st.music,'Music',3,"Your vocal set to music — up to three options, pick the one you love.")
-        +stepHtml(st.details,'Details',4,"Confirm the title, artist, album, genre and year that go into your finished file.")
-        +stepHtml(st.art,'Cover',5,"Your cover artwork — upload your own or approve the studio-created design.")
-        +stepHtml(st.final,'Final',6,"The finished master. Approve it and complete your purchase.")
+        +stepHtml(st.details,'Details',2,"Confirm the title, artist, album, genre and year that go into your finished file.")
+        +stepHtml(st.art,'Cover',3,"Your cover artwork — upload your own or approve the studio-created design.")
+        +stepHtml(st.final,'Final',4,"The finished master. Review and approve it to complete your purchase.")
       +'</div><div class="chev">▶</div>';
     var expand=document.createElement('div');expand.className='expand';
     wrap.appendChild(row);wrap.appendChild(expand);
@@ -1533,12 +1529,13 @@
     }
     expand.appendChild(s1);
 
-    // Stages 2–5 (Cover Art now sits before Final Production)
-    expand.appendChild(clientStage(tr,'2','Produced Vocal','cleaned','Listen and approve the produced vocal, or ask for a fix.','Craig produces the vocal here once the recording is approved.',"Craig's cleaned, produced version of your vocal. Approve it or request a change."));
-    expand.appendChild(musicSamplesStage(tr,'3'));
-    expand.appendChild(detailsStage(tr,'4'));
-    expand.appendChild(artStage(tr,'5'));
-    expand.appendChild(finalStage(tr,'6'));
+    // Stages 2–4: Produced Vocal and Music Samples were cut (2026-10-08) — for custom, done-for-you work Craig produces
+    // and chooses the music directly, and the client reviews the finished piece as a whole at Final Production instead
+    // of approving each production step along the way. clientStage()/musicSamplesStage() stay defined, just unused,
+    // so any older in-flight track's stored data is untouched.
+    expand.appendChild(detailsStage(tr,'2'));
+    expand.appendChild(artStage(tr,'3'));
+    expand.appendChild(finalStage(tr,'4'));
     var pb=payBlock(tr); if(pb) expand.appendChild(pb);
   }
 
@@ -1594,11 +1591,11 @@
   // do it while the music is being made. Pre-filled from the recording title + project defaults, so they only confirm. The admin needs
   // these BEFORE producing the final master, and can fill them in on the client's behalf.
   function detailsStage(tr,num){
-    var a=appr(tr.id), open=!!tr.cleaned, done=detailsDone(a), isAdmin=vr()==='admin';
-    var chip=!open?['lock','Opens after the produced vocal']:(done?['done','Confirmed']:['await','Please confirm']);
-    var el=stageEl(num,'Track Details',chip[0],chip[1],"The title, artist, album, genre and year that go into your finished file. They are pre-filled: check them and confirm.");
+    var a=appr(tr.id), open=tr.raw==='accepted', done=detailsDone(a), isAdmin=vr()==='admin';
+    var chip=!open?['lock','Opens after your recording is approved']:(done?['done','Confirmed']:['await','Please confirm']);
+    var el=stageEl(num,'Track Details',chip[0],chip[1],"The title, artist, album, genre, year and copyright info that go into your finished file. They are pre-filled: check them and confirm.");
     if(!open && !isAdmin){
-      el.insertAdjacentHTML('beforeend','<div class="stage-body">You will confirm your track details here as soon as your produced vocal is ready.</div>');
+      el.insertAdjacentHTML('beforeend','<div class="stage-body">You will confirm your track details here as soon as your recording is approved.</div>');
       return el;
     }
     var m=detailsStart(tr);
@@ -1610,6 +1607,8 @@
       +'<input data-m="album" placeholder="Album / collection" value="'+esc(m.album)+'">'
       +'<input data-m="genre" placeholder="Genre" value="'+esc(m.genre)+'">'
       +'<input data-m="year" placeholder="Year" value="'+esc(m.year)+'">'
+      +'<input data-m="copyright" placeholder="Copyright (e.g. © 2026 Name)" value="'+esc(m.copyright)+'">'
+      +'<input class="full" data-m="copyrightUrl" placeholder="Copyright website (e.g. https://...)" value="'+esc(m.copyrightUrl)+'">'
       +'<button class="mini-btn full" data-msave style="justify-self:start">'+(isAdmin?'Save for the client':(done?'Save changes':'Confirm details'))+'</button>';
     el.appendChild(mf);
     var btn=mf.querySelector('[data-msave]');
@@ -1790,36 +1789,54 @@
   }
 
   // Stage 5 — Final Production: single client approval (wording was already locked at raw upload) + client metadata; pay unlocks once approved.
+  // The whole piece gets reviewed together here now (2026-10-08) — no separate vocal/music approval stages earlier
+  // in the pipeline. Three sub-approvals combine into finalApproved server-side (see /api/approve).
+  var FINAL_CHECKS=[['cleaned','Vocal recording approved'],['music','Music approved'],['levels','Levels approved']];
   function finalStage(tr,num){
     var a=appr(tr.id), ready=!!tr.final, file=tr.audio.final;
-    var approved=!!a.finalApproved;   // wording was already locked in when the client sent the raw recording — one approval covers the finished master
-    var chip = !ready?['lock','In progress']:(approved?['done','Approved']:['await','Awaiting client']);
-    var el=stageEl(num,'Final Production',chip[0],chip[1],"The finished master. Approve it and complete your purchase.");
+    var approved=!!a.finalApproved;
+    var doneCount=FINAL_CHECKS.filter(function(c){ return !!a[c[0]+'Approved']; }).length;
+    var chip = !ready?['lock','In progress']:(approved?['done','Approved']:['await',doneCount?doneCount+' of 3 confirmed':'Awaiting client']);
+    var el=stageEl(num,'Final Production',chip[0],chip[1],"The finished master. Listen to the whole piece, confirm it's ready, then complete your purchase.");
 
     if(ready){
       el.insertAdjacentHTML('beforeend',audioHtml(file));
       if(vr()==='client'){ var pnvF=producerNoteView(tr,'final'); if(pnvF) el.appendChild(pnvF); }
       if(vr()==='client'){
         var actions=document.createElement('div');actions.className='stage-actions';
-        actions.innerHTML='<button class="approve-btn'+(approved?' on':'')+'" data-approve>'+(approved?'Approved ✓':'Approve final master')+'</button><button class="note-toggle" data-notet>Request a change</button>';
+        FINAL_CHECKS.forEach(function(c){
+          var on=!!a[c[0]+'Approved'];
+          var btn=document.createElement('button');
+          btn.className='approve-btn'+(on?' on':'');btn.setAttribute('data-check',c[0]);
+          btn.textContent=(on?'✓ ':'')+c[1];
+          actions.appendChild(btn);
+        });
+        var noteBtn=document.createElement('button');noteBtn.className='note-toggle';noteBtn.setAttribute('data-notet','');noteBtn.textContent='Request a change';
+        actions.appendChild(noteBtn);
         el.appendChild(actions);
         var nb=document.createElement('textarea');nb.className='note-box'+((a.finalNote)?' open':'');nb.placeholder='What would you like changed?';nb.value=a.finalNote||'';
         el.appendChild(nb);
         // Download itself lives on the thumbnail hover in the list row (same spot admin already uses) once paid — not duplicated here to avoid clutter.
         actions.querySelector('[data-notet]').addEventListener('click',function(){ nb.classList.toggle('open'); if(nb.classList.contains('open')) nb.focus(); });
         if(!PREVIEW){
-          actions.querySelector('[data-approve]').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:'final',approved:!approved}).then(reloadKeepOpen); });
+          actions.querySelectorAll('[data-check]').forEach(function(btn){
+            btn.addEventListener('click',function(){
+              var stage=btn.getAttribute('data-check'), was=!!a[stage+'Approved'];
+              api('POST','/api/approve',{trackId:tr.id,stage:stage,approved:!was}).then(reloadKeepOpen);
+            });
+          });
           nb.addEventListener('change',function(){ api('POST','/api/note',{trackId:tr.id,stage:'final',note:nb.value.trim()}).then(function(){ a.finalNote=nb.value.trim(); refreshBar(); }); });
         } else {
           actions.querySelectorAll('button').forEach(function(b){ b.disabled=true; });
           nb.readOnly=true;
         }
       } else {
-        el.insertAdjacentHTML('beforeend','<div class="uling" style="margin-top:8px">Client approval — '+(approved?'✓ approved':'awaiting approval')+'</div>');
+        var summary=FINAL_CHECKS.map(function(c){ return (a[c[0]+'Approved']?'✓':'—')+' '+c[1]; }).join(' · ');
+        el.insertAdjacentHTML('beforeend','<div class="uling" style="margin-top:8px">Client approval — '+esc(summary)+'</div>');
         if(a.finalNote) el.insertAdjacentHTML('beforeend','<div class="client-note-view"><b>Client note:</b> '+esc(a.finalNote)+'</div>');
       }
     } else {
-      el.insertAdjacentHTML('beforeend','<div class="stage-body">The final production comes together after you have chosen your music and confirmed your track details.</div>');
+      el.insertAdjacentHTML('beforeend','<div class="stage-body">The final production comes together once your track details are confirmed.</div>');
     }
 
     if(vr()==='admin'){

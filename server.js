@@ -82,13 +82,12 @@ function projectStats(project){
     if(a.finalApproved) s.complete++;
     if(tr.raw==='received') s.toReview++;
     if(tr.raw==='rerecord') s.rerecord++;
-    if(tr.cleaned && !detailsDone(a)) s.awaitingClient++;
-    // everything the final master depends on is in: vocal approved, music chosen, details confirmed
-    if(a.cleanedApproved && a.musicSeen && detailsDone(a) && !tr.final) s.readyForFinal++;
-    if(tr.cleaned && !a.cleanedApproved) s.awaitingClient++;
+    if(tr.raw==='accepted' && !detailsDone(a)) s.awaitingClient++;
+    // everything the final master depends on is in: recording approved, details confirmed — Craig produces the rest himself
+    if(tr.raw==='accepted' && detailsDone(a) && !tr.final) s.readyForFinal++;
     if(tr.final && !a.finalApproved) s.awaitingClient++;
     if(tr.art && !a.artApproved) s.awaitingClient++;
-    ['cleaned','music','final','art'].forEach(function(k){ if(a[k+'Note']) s.changes++; });
+    ['final','art'].forEach(function(k){ if(a[k+'Note']) s.changes++; });
   });
   return s;
 }
@@ -98,7 +97,8 @@ function resetStageApprovals(project, trackId, stage, sampleIndex){
   var a = project.approvals && project.approvals[trackId]; if(!a) return;
   if(stage==='cleaned') a.cleanedApproved=false;
   else if(stage==='art') a.artApproved=false;
-  else if(stage==='final'){ a.finalApproved=false; a.levelsApproved=false; a.wordingApproved=false; }
+  // Replacing the final master means the client reviews the whole piece again — clear all three sub-approvals, not just one.
+  else if(stage==='final'){ a.finalApproved=false; a.cleanedApproved=false; a.musicApproved=false; a.levelsApproved=false; a.wordingApproved=false; }
   else if(stage==='music' && a.musicSelected===sampleIndex){ a.musicSelected=-1; a.musicSeen=false; }
 }
 function removeStoreFile(name){ if(name){ try{ fs.unlinkSync(path.join(AUDIO_DIR, path.basename(name))); }catch(e){} } }
@@ -349,11 +349,11 @@ app.get('/api/data', requireAuth, function(req,res){
 app.post('/api/approve', requireAuth, function(req,res){
   const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
   const proj=ctx.project, {trackId, stage, approved} = req.body||{};
-  if(['cleaned','final','art','levels','wording'].indexOf(stage)<0) return res.status(400).json({error:'bad stage'});
+  if(['cleaned','music','final','art','levels','wording'].indexOf(stage)<0) return res.status(400).json({error:'bad stage'});
   const a = proj.approvals[trackId] || (proj.approvals[trackId]={});
   a[stage+'Approved'] = !!approved;
-  // Final is approved only when BOTH levels and wording are approved.
-  if(stage==='levels'||stage==='wording'){ a.finalApproved = !!(a.levelsApproved && a.wordingApproved); }
+  // Final Production is one combined review now: vocal recording (cleaned), music and levels all approved together unlock it.
+  if(['cleaned','music','levels'].indexOf(stage)>=0){ a.finalApproved = !!(a.cleanedApproved && a.musicApproved && a.levelsApproved); }
   saveData(DATA); res.json({ok:true, approvals:proj.approvals[trackId]});
 });
 app.post('/api/note', requireAuth, function(req,res){
@@ -385,7 +385,7 @@ app.post('/api/metadata', requireAuth, function(req,res){
   if(!findTrack(proj, trackId)) return res.status(404).json({error:'no track'});
   const m = metadata||{}, s=function(v,n){ return String(v==null?'':v).slice(0,n); };
   const a = proj.approvals[trackId] || (proj.approvals[trackId]={});
-  a.metadata = { title:s(m.title,200), artist:s(m.artist,200), album:s(m.album,200), genre:s(m.genre,80), year:s(m.year,10) };
+  a.metadata = { title:s(m.title,200), artist:s(m.artist,200), album:s(m.album,200), genre:s(m.genre,80), year:s(m.year,10), copyright:s(m.copyright,200), copyrightUrl:s(m.copyrightUrl,300) };
   if(confirm) a.detailsConfirmed = !!a.metadata.title;   // "Confirm details" (client, or admin filling in on their behalf); a title is required
   saveData(DATA); res.json({ok:true, metadata:a.metadata, detailsConfirmed:!!a.detailsConfirmed});
 });
@@ -456,18 +456,9 @@ app.post('/api/track/:id', requireAdmin, function(req,res){
   const p = req.body||{};
   if(p.raw!=null && RAW_STATUSES.indexOf(p.raw)>=0) tr.raw=p.raw;
   ['cleaned','music','final','art'].forEach(function(k){ if(p[k]!=null) tr[k]=!!p[k]; });
-  if(p.final===true){
-    // marking the final master ready implies every earlier production stage already happened — backfill
-    // the gaps so the pipeline doesn't show stale locked/awaiting dots for a recording that's actually done.
-    if(!tr.cleaned) tr.cleaned=true;
-    if(!tr.music) tr.music=true;
-    if(!tr.art) tr.art=true;
-    var a=proj.approvals[tr.id]||(proj.approvals[tr.id]={});
-    if(!a.cleanedApproved) a.cleanedApproved=true;
-    if(!a.musicSeen) a.musicSeen=true;
-    if(!a.artApproved) a.artApproved=true;
-    if(!a.detailsConfirmed) a.detailsConfirmed=true;
-  }
+  // No approval backfill here anymore — vocal recording, music and levels are the client's genuine review
+  // at Final Production now, not assumed from an earlier stage. tr.cleaned/tr.music are legacy flags left
+  // in the data model for old records; nothing in the current flow depends on them being true.
   if(p.title!=null) tr.title = String(p.title).slice(0,200);
   ['note'].forEach(function(k){ if(p[k]!=null) tr[k]=String(p[k]).slice(0,300); });
   if(p.description!=null) tr.description = String(p.description).slice(0,2000);
@@ -651,9 +642,9 @@ app.post('/api/project-update', requireAdmin, function(req,res){
   if(p.intro!=null) proj.intro=String(p.intro).slice(0,2000);
   if(p.preparedBy!=null) proj.preparedBy=String(p.preparedBy).slice(0,120);
   if(p.subtitle!=null) proj.subtitle=String(p.subtitle).slice(0,200);   // blank = auto "Prepared for … · produced by …"
-  if(p.metaDefaults && typeof p.metaDefaults==='object'){   // pre-filled into every recording's Track Details (artist / album / genre / year)
+  if(p.metaDefaults && typeof p.metaDefaults==='object'){   // pre-filled into every recording's Track Details (artist / album / genre / year / copyright / copyright website)
     var md=p.metaDefaults, sv=function(v,n){ return String(v==null?'':v).trim().slice(0,n); };
-    proj.metaDefaults={ artist:sv(md.artist,200), album:sv(md.album,200), genre:sv(md.genre,80), year:sv(md.year,10) };
+    proj.metaDefaults={ artist:sv(md.artist,200), album:sv(md.album,200), genre:sv(md.genre,80), year:sv(md.year,10), copyright:sv(md.copyright,200), copyrightUrl:sv(md.copyrightUrl,300) };
   }
   saveData(DATA); res.json({ok:true});
 });
