@@ -564,6 +564,8 @@
 
   function steps(tr){
     var a=appr(tr.id);
+    // Once a recording is Complete, every stage reads as done — no per-stage auditing of a finished, paid piece.
+    if(isComplete(tr) && tr.raw!=='rerecord') return { raw:'done', cleaned:'done', music:'done', details:'done', final:'done', art:'done' };
     return {
       raw: tr.raw==='rerecord'?'alert':(tr.raw==='accepted'?'done':'neutral'),
       cleaned: !tr.cleaned?'lock':(a.cleanedApproved?'done':'await'),
@@ -1418,10 +1420,10 @@
     var st=steps(tr), lab=statusLabel(tr);
     if(vr()==='admin' && tr.fromClient && tr.raw==='received') lab=['New from client · to review','await'];   // the client sent this in themselves
     if(vr()==='admin' && readyForFinal(tr)) lab=['Ready to produce final','await'];   // your cue: vocal approved, music chosen, details in
-    // Paid shows regardless of approval status (payment can land before or after the client clicks approve) and to both roles.
-    // Unpaid stays admin-only and only once approved — before that there's nothing actionable to flag, and the client doesn't need the nudge.
+    // Paid shows regardless of approval status (payment can land before or after the client clicks approve). Unpaid only
+    // once approved — before that there's nothing to pay yet. Both pills visible to admin and client.
     var paymentBadge = tr.final && tr.paid ? ' <span class="r-paid">Paid</span>'
-      : (vr()==='admin' && tr.final && appr(tr.id).finalApproved && !tr.paid) ? ' <span class="r-unpaid">Unpaid</span>' : '';
+      : (tr.final && appr(tr.id).finalApproved && !tr.paid) ? ' <span class="r-unpaid">Unpaid</span>' : '';
     function stepHtml(cls,label,num,tip){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
     // Vocal tooltip must reflect the real state — never claim a recording is in / approved when it isn't.
     var hasRaw = !!(tr.audio && tr.audio.raw);
@@ -1433,8 +1435,8 @@
     // cover thumbnail to the left of the title, like a music list. The client only sees it once the cover is ready for them; otherwise a quiet placeholder keeps titles aligned.
     var showCover = !!(tr.cover && (vr()==='admin' || tr.art));
     var thumbInner = showCover ? '<img class="r-thumb" src="media/'+encodeURIComponent(tr.cover)+'" alt="" loading="lazy" decoding="async">' : '<div class="r-thumb r-thumb-empty" aria-hidden="true">&#9834;</div>';
-    // play/download live on the cover art itself, on hover — admin only, keeps the row layout untouched
-    var canDownload = vr()==='admin' && tr.audio && tr.audio.final;
+    // play/download live on the cover art itself, on hover — admin always, client once paid. Keeps the row layout untouched either way.
+    var canDownload = !!(tr.audio && tr.audio.final) && (vr()==='admin' || tr.paid);
     var thumbHover = canDownload ? '<div class="r-thumb-hover">'
         +'<button type="button" class="r-thumb-btn" data-play title="Preview the final master">&#9654;</button>'
         +'<a class="r-thumb-btn" href="audio/'+encodeURIComponent(tr.audio.final)+'" download title="Download final master">&#8681;</a>'
@@ -1803,6 +1805,7 @@
         el.appendChild(actions);
         var nb=document.createElement('textarea');nb.className='note-box'+((a.finalNote)?' open':'');nb.placeholder='What would you like changed?';nb.value=a.finalNote||'';
         el.appendChild(nb);
+        // Download itself lives on the thumbnail hover in the list row (same spot admin already uses) once paid — not duplicated here to avoid clutter.
         actions.querySelector('[data-notet]').addEventListener('click',function(){ nb.classList.toggle('open'); if(nb.classList.contains('open')) nb.focus(); });
         if(!PREVIEW){
           actions.querySelector('[data-approve]').addEventListener('click',function(){ api('POST','/api/approve',{trackId:tr.id,stage:'final',approved:!approved}).then(reloadKeepOpen); });
