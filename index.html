@@ -145,11 +145,17 @@
   .step::before{content:"";position:absolute;top:7px;left:-33px;width:66px;height:2px;background:var(--lock);z-index:1}
   .step:first-child::before{display:none}
   .step.on-line::before{background:var(--done)}
-  .chev{color:var(--muted);font-size:13px;transition:transform .2s;flex:0 0 auto}
-  .track.open .chev{transform:rotate(90deg)}
+  .chev{color:var(--muted);font-size:13px;flex:0 0 auto}
 
-  .expand{display:none;padding:4px 16px 18px;background:#fcfcfe}
-  .track.open .expand{display:block}
+  /* Recording page — its own full page instead of expanding inline in the list, so a long catalogue doesn't turn into one giant scroll */
+  .rec-page{max-width:720px}
+  .rec-back{margin-bottom:20px}
+  .rec-head{display:flex;align-items:center;gap:20px;margin-bottom:24px}
+  .rec-head .r-thumb,.rec-head .r-thumb-empty{width:68px;height:68px;border-radius:14px;font-size:24px}
+  .rec-head-title{font-family:'Fraunces',serif;font-size:26px;font-weight:600;color:var(--navy);margin-bottom:6px}
+  .r-status.big{font-size:14px}
+  .rec-tracker{margin-bottom:28px;padding:18px 14px 6px;background:var(--card);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow)}
+  .rec-body .stage{padding:18px 22px;margin-top:16px}
   .stage{border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-top:10px}
   .stage-head{display:flex;align-items:center;gap:10px;margin-bottom:4px}
   .stage-num{width:20px;height:20px;border-radius:50%;background:var(--navy);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
@@ -407,7 +413,7 @@
 
 <script>
 (function(){
-  var D=null, ROLE=null, FILTER='__all__', openIds={}, PREVIEW=false;
+  var D=null, ROLE=null, FILTER='__all__', CURRENT_REC=null, PREVIEW=false;
   // effective view-role: admin can preview the client experience without logging out
   function vr(){ return PREVIEW ? 'client' : ROLE; }
 
@@ -618,6 +624,11 @@
       addNavLabel('Recordings');
       addNav('Overview','__all__',false);
     }
+    if(CURRENT_REC){
+      var openTr=findTrackById(CURRENT_REC);
+      if(openTr){ host.appendChild(recordingPage(openTr)); return; }
+      CURRENT_REC=null;
+    }
     if(special) special();
     var hasContent = D.categories.some(function(c){ return !c.implicit || catTracks(c).length; });   // any group, or any recording
     if(!special && !hasContent){
@@ -712,11 +723,19 @@
   function addNavLabel(text){ var d=document.createElement('div');d.className='nav-sec-label';d.textContent=text;nav.appendChild(d); }
 
   // ---- admin: client list home + per-client workspace ----
-  function goHome(){ FILTER='__home__'; PREVIEW=false; syncViewChrome(); render(); window.scrollTo({top:0,behavior:'smooth'}); }
+  function goHome(){ FILTER='__home__'; CURRENT_REC=null; PREVIEW=false; syncViewChrome(); render(); window.scrollTo({top:0,behavior:'smooth'}); }
   function openProject(pid){
-    return api('POST','/api/project-select',{projectId:pid}).then(function(){ FILTER='__all__'; PREVIEW=false; syncViewChrome(); return reloadKeepOpen(); })
+    return api('POST','/api/project-select',{projectId:pid}).then(function(){ FILTER='__all__'; CURRENT_REC=null; PREVIEW=false; syncViewChrome(); return reloadKeepOpen(); })
       .then(function(){ window.scrollTo({top:0,behavior:'smooth'}); }).catch(function(e){ toast(errMsg(e,'Could not open that project'),'err'); });
   }
+  // ---- recording detail page: a full page per recording instead of expanding inline in the list
+  function findTrackById(id){
+    var found=null;
+    D.categories.forEach(function(cat){ catTracks(cat).forEach(function(t){ if(t.id===id) found=t; }); });
+    return found;
+  }
+  function openRecording(id){ CURRENT_REC=id; render(); window.scrollTo({top:0,behavior:'smooth'}); }
+  function closeRecording(){ CURRENT_REC=null; render(); window.scrollTo({top:0,behavior:'smooth'}); }
   function newProjectFor(c){
     return uiPrompt('Name the new project for '+c.name+'. Each project is its own portal with its own access code, recordings and approvals.',{title:'New project',okLabel:'Create project',placeholder:'e.g. The Spiritual Sanctuary',
       validate:function(v){ return v?'':'Enter a project name.'; }}).then(function(name){
@@ -1393,7 +1412,7 @@
     });
     box.querySelector('[data-del]').addEventListener('click',function(){
       uiConfirm('This deletes "'+tr.title+'" and any audio uploaded for it. It cannot be undone.',{title:'Remove recording',okLabel:'Remove recording',danger:true}).then(function(ok){
-        if(ok) api('POST','/api/track-delete',{id:tr.id}).then(function(){ openIds[tr.id]=0; reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Remove failed'),'err'); });
+        if(ok) api('POST','/api/track-delete',{id:tr.id}).then(function(){ CURRENT_REC=null; reloadKeepOpen(); }).catch(function(e){ toast(errMsg(e,'Remove failed'),'err'); });
       });
     });
     return box;
@@ -1402,7 +1421,7 @@
     var b=document.createElement('button');
     b.className='nav-item'+(isSub?' sub':'')+(FILTER===filter?' active':'');
     b.innerHTML=esc(label)+(count!=null?'<span class="n-count">'+count+'</span>':'');
-    b.addEventListener('click',function(){ FILTER=filter; render(); window.scrollTo({top:0,behavior:'smooth'}); });
+    b.addEventListener('click',function(){ FILTER=filter; CURRENT_REC=null; render(); window.scrollTo({top:0,behavior:'smooth'}); });
     nav.appendChild(b);
   }
   // Complete recordings float to the top of each group automatically; everything else keeps its original order (stable sort).
@@ -1413,26 +1432,45 @@
     return l;
   }
 
-  function trackEl(tr){
-    var wrap=document.createElement('div');wrap.className='track'+(isComplete(tr)?' complete':'')+(openIds[tr.id]?' open':'');
-    var st=steps(tr), lab=statusLabel(tr);
+  // shared between the list row's compact tracker and the recording page's tracker
+  function stepHtml(cls,label,num,tip){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
+  // Vocal tooltip must reflect the real state — never claim a recording is in / approved when it isn't.
+  function rawTipFor(tr,st){
+    var hasRaw=!!(tr.audio && tr.audio.raw);
+    return st.raw==='alert' ? "This recording needs to be re-recorded — please record again and upload it."
+         : st.raw==='done'  ? "Your recording is in and approved for production."
+         : (hasRaw && tr.raw!=='none') ? "Your recording is in, awaiting Craig's quality check."
+         :                     "Waiting on your recording to begin production.";
+  }
+  function trackerHtml(tr,st){
+    return stepHtml(st.raw,'Vocal',1,rawTipFor(tr,st))
+      +stepHtml(st.details,'Details',2,"Confirm the title, artist, album, genre and year that go into your finished file.")
+      +stepHtml(st.art,'Cover',3,"Your cover artwork — upload your own or approve the studio-created design.")
+      +stepHtml(st.final,'Final',4,"The finished master. Review and approve it to complete your purchase.");
+  }
+  function statusLabelFor(tr){
+    var lab=statusLabel(tr);
     if(vr()==='admin' && tr.fromClient && tr.raw==='received') lab=['New from client · to review','await'];   // the client sent this in themselves
     if(vr()==='admin' && readyForFinal(tr)) lab=['Ready to produce final','await'];   // your cue: vocal approved, music chosen, details in
-    // Paid shows regardless of approval status (payment can land before or after the client clicks approve). Unpaid only
-    // once approved — before that there's nothing to pay yet. Both pills visible to admin and client.
-    var paymentBadge = tr.final && tr.paid ? ' <span class="r-paid">Paid</span>'
+    return lab;
+  }
+  // Paid shows regardless of approval status (payment can land before or after the client clicks approve). Unpaid only
+  // once approved — before that there's nothing to pay yet. Both pills visible to admin and client.
+  function paymentBadgeFor(tr){
+    return tr.final && tr.paid ? ' <span class="r-paid">Paid</span>'
       : (tr.final && appr(tr.id).finalApproved && !tr.paid) ? ' <span class="r-unpaid">Unpaid</span>' : '';
-    function stepHtml(cls,label,num,tip){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
-    // Vocal tooltip must reflect the real state — never claim a recording is in / approved when it isn't.
-    var hasRaw = !!(tr.audio && tr.audio.raw);
-    var rawTip = st.raw==='alert' ? "This recording needs to be re-recorded — please record again and upload it."
-               : st.raw==='done'  ? "Your recording is in and approved for production."
-               : (hasRaw && tr.raw!=='none') ? "Your recording is in, awaiting Craig's quality check."
-               :                     "Waiting on your recording to begin production.";
-    var row=document.createElement('div');row.className='row';
-    // cover thumbnail to the left of the title, like a music list. The client only sees it once the cover is ready for them; otherwise a quiet placeholder keeps titles aligned.
+  }
+  function coverThumbHtml(tr){
+    // cover thumbnail, like a music list. The client only sees it once the cover is ready for them; otherwise a quiet placeholder keeps titles aligned.
     var showCover = !!(tr.cover && (vr()==='admin' || tr.art));
-    var thumbInner = showCover ? '<img class="r-thumb" src="media/'+encodeURIComponent(tr.cover)+'" alt="" loading="lazy" decoding="async">' : '<div class="r-thumb r-thumb-empty" aria-hidden="true">&#9834;</div>';
+    return showCover ? '<img class="r-thumb" src="media/'+encodeURIComponent(tr.cover)+'" alt="" loading="lazy" decoding="async">' : '<div class="r-thumb r-thumb-empty" aria-hidden="true">&#9834;</div>';
+  }
+
+  function trackEl(tr){
+    var wrap=document.createElement('div');wrap.className='track'+(isComplete(tr)?' complete':'');
+    var st=steps(tr), lab=statusLabelFor(tr);
+    var paymentBadge=paymentBadgeFor(tr);
+    var row=document.createElement('div');row.className='row';
     // Preview lives on the cover art itself, on hover — open to both roles once a final master exists. Download from
     // here stays admin-only; the client's download lives in Final Production instead, gated on payment there.
     var hasFinalFile = !!(tr.audio && tr.audio.final);
@@ -1441,17 +1479,10 @@
         +'<button type="button" class="r-thumb-btn" data-play title="Preview the final master">&#9654;</button>'
         +(canDownload ? '<a class="r-thumb-btn" href="audio/'+encodeURIComponent(tr.audio.final)+'" download title="Download final master">&#8681;</a>' : '')
       +'</div>' : '';
-    var thumb = '<div class="r-thumb-wrap">'+thumbInner+thumbHover+'</div>';
+    var thumb = '<div class="r-thumb-wrap">'+coverThumbHtml(tr)+thumbHover+'</div>';
     row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+paymentBadge+'</div></div>'
-      +'<div class="tracker">'
-        +stepHtml(st.raw,'Vocal',1,rawTip)
-        +stepHtml(st.details,'Details',2,"Confirm the title, artist, album, genre and year that go into your finished file.")
-        +stepHtml(st.art,'Cover',3,"Your cover artwork — upload your own or approve the studio-created design.")
-        +stepHtml(st.final,'Final',4,"The finished master. Review and approve it to complete your purchase.")
-      +'</div><div class="chev">▶</div>';
-    var expand=document.createElement('div');expand.className='expand';
-    wrap.appendChild(row);wrap.appendChild(expand);
-    var built=openIds[tr.id]; if(built) buildExpand(tr,expand);
+      +'<div class="tracker">'+trackerHtml(tr,st)+'</div><div class="chev">▶</div>';
+    wrap.appendChild(row);
     if(hasFinalFile){
       row.querySelector('.r-thumb-wrap').addEventListener('click',function(ev){ ev.stopPropagation(); });   // only intercept clicks when there's actually a play/download popover to protect
       var playBtn=row.querySelector('[data-play]'), rowAudio=null;
@@ -1469,10 +1500,31 @@
         rowAudio.play();
       });
     }
-    row.addEventListener('click',function(){
-      if(!expand.innerHTML) buildExpand(tr,expand);
-      var open=wrap.classList.toggle('open'); openIds[tr.id]=open?1:0;
-    });
+    // clicking the row opens this recording as its own full page, instead of expanding inline in a long list
+    row.addEventListener('click',function(){ openRecording(tr.id); });
+    return wrap;
+  }
+
+  // a recording's own full page: same stage content as the old inline expand, given room to breathe
+  function recordingPage(tr){
+    var wrap=document.createElement('div');wrap.className='rec-page';
+    var back=document.createElement('button');back.className='crumb-back rec-back';back.innerHTML='← All recordings';
+    back.addEventListener('click',closeRecording);
+    wrap.appendChild(back);
+
+    var st=steps(tr), lab=statusLabelFor(tr);
+    var head=document.createElement('div');head.className='rec-head';
+    head.innerHTML='<div class="r-thumb-wrap">'+coverThumbHtml(tr)+'</div>'
+      +'<div class="r-main"><div class="rec-head-title">'+esc(tr.title)+'</div><div class="r-status big '+lab[1]+'">'+lab[0]+paymentBadgeFor(tr)+'</div></div>';
+    wrap.appendChild(head);
+
+    var trackerBar=document.createElement('div');trackerBar.className='tracker rec-tracker';
+    trackerBar.innerHTML=trackerHtml(tr,st);
+    wrap.appendChild(trackerBar);
+
+    var body=document.createElement('div');body.className='rec-body';
+    buildExpand(tr,body);
+    wrap.appendChild(body);
     return wrap;
   }
 
