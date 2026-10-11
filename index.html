@@ -86,11 +86,6 @@
   .ib-intro{font-size:14px;color:var(--ink);max-width:640px}
   .admin-hint{margin-top:12px;font-size:12.5px;color:var(--gold);background:var(--await-bg);border-radius:9px;padding:9px 12px;display:inline-block}
 
-  .pipe-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:11px;padding:12px 16px;margin-bottom:22px;font-size:12px;color:var(--muted)}
-  .pipe-legend .flow{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--ink)}
-  .pipe-legend .arrow{color:var(--lock)}
-  .pipe-legend .keys{margin-left:auto;display:flex;gap:14px;flex-wrap:wrap}
-  .pipe-legend .keys span{display:inline-flex;align-items:center;gap:6px}
   .kdot{width:9px;height:9px;border-radius:50%}
   .kdot.done{background:var(--done)} .kdot.await{background:var(--await)} .kdot.lock{background:var(--lock)} .kdot.alert{background:var(--alert)}
 
@@ -224,9 +219,9 @@
   .toast{background:var(--navy);color:#fff;font-size:13px;padding:10px 16px;border-radius:10px;box-shadow:0 8px 24px rgba(20,26,45,.25);max-width:min(90vw,460px);transition:opacity .25s,transform .25s}
   .toast.err{background:var(--alert)} .toast.ok{background:var(--done)} .toast.out{opacity:0;transform:translateY(6px)}
   /* admin home (client list) + per-client workspace chrome */
-  .global-view .intro-band, .global-view .pipe-legend, .global-view .bar{display:none}
-  /* inside a single recording the page has its own header + tracker — the project title and flow legend above it are redundant */
-  .rec-open .intro-band, .rec-open .pipe-legend{display:none}
+  .global-view .intro-band, .global-view .bar{display:none}
+  /* inside a single recording the page has its own header + tracker — the project title above it is redundant */
+  .rec-open .intro-band{display:none}
   .crumbs{align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;color:var(--muted)}
   .crumb-back{font-family:inherit;font-size:13px;font-weight:600;color:var(--navy);background:#fff;border:1px solid var(--line);border-radius:9px;padding:6px 12px;cursor:pointer}
   .crumb-back:hover{background:var(--bg)}
@@ -390,15 +385,6 @@
             <div class="ib-sub" id="ibSub"></div>
             <div class="ib-intro" id="ibIntro"></div>
             <div class="admin-hint" id="adminHint" style="display:none">Admin mode — upload audio to any stage and toggle when it's ready for the client to review.</div>
-          </div>
-        </div>
-        <div class="pipe-legend">
-          <div class="flow"><span title="Your raw recording is in. Craig confirms it's good to produce, or flags a re-record.">Vocal Received</span><span class="arrow">→</span><span title="Craig's cleaned, produced version of your vocal. Approve it or request a change.">Produced Vocal</span><span class="arrow">→</span><span title="Your vocal set to music — pick the option you love.">Music Samples</span><span class="arrow">→</span><span title="Confirm the title, artist, album, genre and year that go into your finished file.">Track Details</span><span class="arrow">→</span><span title="Your cover artwork — upload your own or approve the studio-created design.">Cover Art</span><span class="arrow">→</span><span title="The finished master. Approve it and complete your purchase.">Final</span></div>
-          <div class="keys">
-            <span><i class="kdot await"></i> Awaiting client</span>
-            <span><i class="kdot done"></i> Approved</span>
-            <span><i class="kdot lock"></i> In progress</span>
-            <span><i class="kdot alert"></i> Re-record</span>
           </div>
         </div>
         <div id="categories"></div>
