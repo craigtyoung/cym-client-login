@@ -225,6 +225,8 @@
   .toast.err{background:var(--alert)} .toast.ok{background:var(--done)} .toast.out{opacity:0;transform:translateY(6px)}
   /* admin home (client list) + per-client workspace chrome */
   .global-view .intro-band, .global-view .pipe-legend, .global-view .bar{display:none}
+  /* inside a single recording the page has its own header + tracker — the project title and flow legend above it are redundant */
+  .rec-open .intro-band, .rec-open .pipe-legend{display:none}
   .crumbs{align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;color:var(--muted)}
   .crumb-back{font-family:inherit;font-size:13px;font-weight:600;color:var(--navy);background:#fff;border:1px solid var(--line);border-radius:9px;padding:6px 12px;cursor:pointer}
   .crumb-back:hover{background:var(--bg)}
@@ -593,6 +595,7 @@
   // ---- render
   var nav=document.getElementById('nav'), host=document.getElementById('categories');
   function render(){
+    document.body.classList.toggle('rec-open', !!CURRENT_REC);
     nav.innerHTML=''; host.innerHTML='';
     var isAdmin = vr()==='admin';
     var special = (SPECIAL[FILTER] && (isAdmin || FILTER==='__account__' || FILTER==='__propose__')) ? SPECIAL[FILTER] : null;
