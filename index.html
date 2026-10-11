@@ -1615,7 +1615,10 @@
         return el;
       }
       var h='<div class="pay-lbl">'+(approved?'You have approved the final master.':'Approve the final master above to complete your purchase.')+(payLabel?' <b>'+esc(payLabel)+'</b>':'')+'</div>';
-      if(approved && payUrl){
+      if(approved && payUrl && PREVIEW){
+        // Preview must never expose a real, clickable payment link — every other client control locks in preview, this one didn't.
+        h+='<span class="pay-btn disabled" title="Read-only preview — log in with the client code to pay">Approve &amp; Pay</span><div class="pay-note">Read-only preview.</div>';
+      }else if(approved && payUrl){
         h+='<a class="pay-btn" href="'+esc(payLinkFor(payUrl,tr))+'" target="_blank" rel="noopener">Approve &amp; Pay</a>';
         h+='<div class="pay-note">'+(tr.paidFlagged?'Thanks — Craig will confirm your payment shortly.':'Already sent it? <a href="#" data-flagpaid>Let Craig know</a>.')+'</div>';
       }else if(approved && !payUrl){
