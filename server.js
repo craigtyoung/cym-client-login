@@ -331,7 +331,7 @@ app.get('/api/data', requireAuth, function(req,res){
   const proj=ctx.project, client=ctx.client;
   const out={ role:req.role, brand:DATA.brand,
     client:{ id:client.id, name:client.name, logo:client.logo||'' },
-    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', art:proj.art||'', metaDefaults:proj.metaDefaults||{} },
+    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', art:proj.art||'', metaDefaults:proj.metaDefaults||{}, requirePayment:proj.requirePayment!==false },
     contact: client.contact || {method:'WhatsApp'},
     categories: proj.categories, approvals: proj.approvals };
   if(req.role==='client') out.proposals = client.proposals || [];   // a client only ever sees their own proposals
@@ -642,6 +642,7 @@ app.post('/api/project-update', requireAdmin, function(req,res){
   if(p.intro!=null) proj.intro=String(p.intro).slice(0,2000);
   if(p.preparedBy!=null) proj.preparedBy=String(p.preparedBy).slice(0,120);
   if(p.subtitle!=null) proj.subtitle=String(p.subtitle).slice(0,200);   // blank = auto "Prepared for … · produced by …"
+  if(p.requirePayment!=null) proj.requirePayment=!!p.requirePayment;   // gate the final-master download on payment; defaults true for new/unfamiliar clients
   if(p.metaDefaults && typeof p.metaDefaults==='object'){   // pre-filled into every recording's Track Details (artist / album / genre / year / copyright / copyright website)
     var md=p.metaDefaults, sv=function(v,n){ return String(v==null?'':v).trim().slice(0,n); };
     proj.metaDefaults={ artist:sv(md.artist,200), album:sv(md.album,200), genre:sv(md.genre,80), year:sv(md.year,10), copyright:sv(md.copyright,200), copyrightUrl:sv(md.copyrightUrl,300) };
