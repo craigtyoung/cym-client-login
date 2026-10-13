@@ -1584,7 +1584,33 @@
     expand.appendChild(detailsStage(tr,'2'));
     expand.appendChild(artStage(tr,'3'));
     expand.appendChild(finalStage(tr,'4'));
+    var promo=promoStage(tr); if(promo) expand.appendChild(promo);
     var pb=payBlock(tr); if(pb) expand.appendChild(pb);
+  }
+
+  // Promotional sample — an optional bonus deliverable, not part of the 4-stage approval pipeline. Never gated on
+  // payment or approval: once uploaded, the client can download and share it freely (social media, website, etc).
+  function promoStage(tr){
+    var ready=!!(tr.audio && tr.audio.promo);
+    if(!ready && vr()==='client') return null;   // nothing to show the client until one exists — stays a quiet bonus, not a pending item
+    var chip = ready ? ['done','Ready to share'] : ['lock','Not added yet'];
+    var el=stageEl('✦','Promotional Sample',chip[0],chip[1],"A short promotional sample of this piece — ready to share on social media, your website, or anywhere else you want to promote this work.");
+    if(ready){
+      el.insertAdjacentHTML('beforeend',audioHtml(tr.audio.promo));
+      var dlRow=document.createElement('div');dlRow.className='stage-actions';
+      dlRow.innerHTML='<a class="mini-btn ghost" href="audio/'+encodeURIComponent(tr.audio.promo)+'" download>Download promo sample</a>';
+      el.appendChild(dlRow);
+    } else {
+      el.insertAdjacentHTML('beforeend','<div class="stage-body">An optional short sample for marketing — social media, your website, wherever you want to promote this work.</div>');
+    }
+    if(vr()==='admin'){
+      var ab=document.createElement('div');ab.className='admin-box';
+      ab.innerHTML='<div class="lbl">Admin — Promotional Sample</div><div class="admin-row" data-file-row></div>'
+        +'<div class="sec-note" style="margin:4px 0 0">Optional. Not gated on payment or approval — available for the client to download and share as soon as it&rsquo;s uploaded.</div>';
+      ab.querySelector('[data-file-row]').appendChild(fileControl({tr:tr,stage:'promo',cur:tr.audio&&tr.audio.promo,label:'Upload promo sample'}));
+      el.appendChild(ab);
+    }
+    return el;
   }
 
   // Approve & Pay — client sees a grayed button once the Final master is ready; it activates on approval.

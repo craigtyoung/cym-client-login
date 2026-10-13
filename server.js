@@ -671,8 +671,8 @@ app.post('/api/upload', requireAuth, upload.single('file'), function(req,res){
   const {trackId, stage} = req.body||{};
   const cleanup = function(){ if(req.file){ try{ fs.unlinkSync(req.file.path); }catch(e){} } };
   if(!ctx){ cleanup(); return res.status(404).json({error:'no project'}); }
-  if(['raw','cleaned','music','final','art'].indexOf(stage)<0){ cleanup(); return res.status(400).json({error:'bad stage'}); }
-  // client may only upload the RAW recording; producing stages (incl. artwork) are admin-only
+  if(['raw','cleaned','music','final','art','promo'].indexOf(stage)<0){ cleanup(); return res.status(400).json({error:'bad stage'}); }
+  // client may only upload the RAW recording; producing stages (incl. artwork and the promo sample) are admin-only
   if(stage!=='raw' && req.role!=='admin'){ cleanup(); return res.status(403).json({error:'admin only for this stage'}); }
   const proj=ctx.project, tr = findTrack(proj, trackId);
   if(!tr){ cleanup(); return res.status(404).json({error:'no track'}); }
@@ -733,7 +733,7 @@ app.post('/api/submit-recording', requireAuth, function(req,res,next){ upload.si
 app.post('/api/upload-delete', requireAdmin, function(req,res){
   const ctx=currentContext(req); if(!ctx) return res.status(404).json({error:'no project'});
   const proj=ctx.project, {trackId, stage} = req.body||{};
-  if(['raw','cleaned','music','final','art'].indexOf(stage)<0) return res.status(400).json({error:'bad stage'});
+  if(['raw','cleaned','music','final','art','promo'].indexOf(stage)<0) return res.status(400).json({error:'bad stage'});
   const tr = findTrack(proj, trackId);
   if(!tr) return res.status(404).json({error:'no track'});
   if(!tr.audio) tr.audio={};
