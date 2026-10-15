@@ -560,11 +560,10 @@
 
   function steps(tr){
     var a=appr(tr.id);
-    // Once a recording is Complete, every stage reads as done — no per-stage auditing of a finished piece.
-    // Admin sees gold (not green) until it's actually paid, so a finished-but-unpaid recording never reads
-    // identically to a finished-and-paid one at a glance. Client always sees green — unpaid stays admin-only,
-    // same rule as the rest of the payment UI.
-    if(isComplete(tr) && tr.raw!=='rerecord'){ var cls=(vr()==='admin' && !tr.paid)?'unpaid':'done'; return { raw:cls, details:cls, art:cls, final:cls }; }
+    // Once a recording is Complete, the first three stages read as done — no per-stage auditing of a
+    // finished piece. Final is the one stage actually tied to money: gold until paid, green once paid,
+    // visible to both admin and client (payment status is no longer admin-only).
+    if(isComplete(tr) && tr.raw!=='rerecord'){ return { raw:'done', details:'done', art:'done', final: tr.paid?'done':'unpaid' }; }
     return {
       raw: tr.raw==='rerecord'?'alert':(tr.raw==='accepted'?'done':'neutral'),
       details: tr.raw!=='accepted'?'lock':(detailsDone(a)?'done':'await'),
@@ -575,7 +574,7 @@
   function statusLabel(tr){
     var a=appr(tr.id);
     if(tr.raw==='rerecord') return ['Re-record requested','alert'];
-    if(isComplete(tr)) return (vr()==='admin' && !tr.paid) ? ['Complete — unpaid','unpaid'] : ['Complete','done'];
+    if(isComplete(tr)) return tr.paid ? ['Complete','done'] : ['Complete — unpaid','unpaid'];
     if(tr.final && !a.finalApproved) return ['Ready for final approval','await'];
     if(tr.raw==='accepted' && !detailsDone(a)) return ['Awaiting track details','await'];
     if(tr.raw==='accepted') return ['In production','neutral'];
