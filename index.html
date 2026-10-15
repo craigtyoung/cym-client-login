@@ -125,7 +125,7 @@
   .r-main{flex:1;min-width:0}
   .r-title{font-size:14.5px;font-weight:600;color:var(--ink)}
   .r-status{font-size:12px;margin-top:3px;font-weight:500}
-  .r-status.done{color:var(--done)} .r-status.await{color:var(--await)} .r-status.alert{color:var(--alert)} .r-status.neutral{color:var(--muted)}
+  .r-status.done{color:var(--done)} .r-status.await{color:var(--await)} .r-status.alert{color:var(--alert)} .r-status.neutral{color:var(--muted)} .r-status.unpaid{color:var(--gold)}
   .r-unpaid{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);background:var(--await-bg);padding:2px 8px;border-radius:20px}
   .r-paid{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--done);background:var(--done-bg);padding:2px 8px;border-radius:20px}
 
@@ -133,13 +133,15 @@
   .step{display:flex;flex-direction:column;align-items:center;width:66px;position:relative}
   .step .sdot{width:16px;height:16px;border-radius:50%;background:var(--lock-bg);border:2px solid var(--lock);z-index:2;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700}
   .step.done .sdot{background:var(--done);border-color:var(--done)}
+  .step.unpaid .sdot{background:var(--gold);border-color:var(--gold)}
   .step.await .sdot{background:var(--await);border-color:var(--await)}
   .step.alert .sdot{background:var(--alert);border-color:var(--alert)}
   .step .slabel{font-size:10px;color:var(--muted);margin-top:5px;white-space:nowrap;font-weight:500}
-  .step.done .slabel,.step.await .slabel{color:var(--ink)}
+  .step.done .slabel,.step.unpaid .slabel,.step.await .slabel{color:var(--ink)}
   .step::before{content:"";position:absolute;top:7px;left:-33px;width:66px;height:2px;background:var(--lock);z-index:1}
   .step:first-child::before{display:none}
   .step.on-line::before{background:var(--done)}
+  .step.unpaid.on-line::before{background:var(--gold)}
   .chev{color:var(--muted);font-size:13px;flex:0 0 auto}
 
   /* Recording page — its own full page instead of expanding inline in the list, so a long catalogue doesn't turn into one giant scroll */
@@ -558,8 +560,11 @@
 
   function steps(tr){
     var a=appr(tr.id);
-    // Once a recording is Complete, every stage reads as done — no per-stage auditing of a finished, paid piece.
-    if(isComplete(tr) && tr.raw!=='rerecord') return { raw:'done', details:'done', art:'done', final:'done' };
+    // Once a recording is Complete, every stage reads as done — no per-stage auditing of a finished piece.
+    // Admin sees gold (not green) until it's actually paid, so a finished-but-unpaid recording never reads
+    // identically to a finished-and-paid one at a glance. Client always sees green — unpaid stays admin-only,
+    // same rule as the rest of the payment UI.
+    if(isComplete(tr) && tr.raw!=='rerecord'){ var cls=(vr()==='admin' && !tr.paid)?'unpaid':'done'; return { raw:cls, details:cls, art:cls, final:cls }; }
     return {
       raw: tr.raw==='rerecord'?'alert':(tr.raw==='accepted'?'done':'neutral'),
       details: tr.raw!=='accepted'?'lock':(detailsDone(a)?'done':'await'),
@@ -570,7 +575,7 @@
   function statusLabel(tr){
     var a=appr(tr.id);
     if(tr.raw==='rerecord') return ['Re-record requested','alert'];
-    if(isComplete(tr)) return ['Complete','done'];
+    if(isComplete(tr)) return (vr()==='admin' && !tr.paid) ? ['Complete — unpaid','unpaid'] : ['Complete','done'];
     if(tr.final && !a.finalApproved) return ['Ready for final approval','await'];
     if(tr.raw==='accepted' && !detailsDone(a)) return ['Awaiting track details','await'];
     if(tr.raw==='accepted') return ['In production','neutral'];
@@ -1425,7 +1430,7 @@
   }
 
   // shared between the list row's compact tracker and the recording page's tracker
-  function stepHtml(cls,label,num,tip){ return '<div class="step '+cls+(cls==='done'?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(cls==='done'?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
+  function stepHtml(cls,label,num,tip){ var checked=(cls==='done'||cls==='unpaid'); return '<div class="step '+cls+(checked?' on-line':'')+'" title="'+esc(tip||'')+'"><div class="sdot">'+(checked?'✓':num)+'</div><div class="slabel">'+label+'</div></div>'; }
   // Vocal tooltip must reflect the real state — never claim a recording is in / approved when it isn't.
   function rawTipFor(tr,st){
     var hasRaw=!!(tr.audio && tr.audio.raw);
@@ -1461,7 +1466,6 @@
   function trackEl(tr){
     var wrap=document.createElement('div');wrap.className='track'+(isComplete(tr)?' complete':'');
     var st=steps(tr), lab=statusLabelFor(tr);
-    var paymentBadge=paymentBadgeFor(tr);
     var row=document.createElement('div');row.className='row';
     // Preview lives on the cover art itself, on hover — open to both roles once a final master exists. Download from
     // here stays admin-only; the client's download lives in Final Production instead, gated on payment there.
@@ -1472,7 +1476,7 @@
         +(canDownload ? '<a class="r-thumb-btn" href="audio/'+encodeURIComponent(tr.audio.final)+'" download title="Download final master">&#8681;</a>' : '')
       +'</div>' : '';
     var thumb = '<div class="r-thumb-wrap">'+coverThumbHtml(tr)+thumbHover+'</div>';
-    row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+paymentBadge+'</div></div>'
+    row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+'</div></div>'
       +'<div class="tracker">'+trackerHtml(tr,st)+'</div><div class="chev">▶</div>';
     wrap.appendChild(row);
     if(hasFinalFile){
@@ -1507,7 +1511,7 @@
     var st=steps(tr), lab=statusLabelFor(tr);
     var head=document.createElement('div');head.className='rec-head';
     head.innerHTML='<div class="r-thumb-wrap">'+coverThumbHtml(tr)+'</div>'
-      +'<div class="r-main"><div class="rec-head-title">'+esc(tr.title)+'</div><div class="r-status big '+lab[1]+'">'+lab[0]+paymentBadgeFor(tr)+'</div></div>';
+      +'<div class="r-main"><div class="rec-head-title">'+esc(tr.title)+'</div><div class="r-status big '+lab[1]+'">'+lab[0]+'</div></div>';
     wrap.appendChild(head);
 
     var trackerBar=document.createElement('div');trackerBar.className='tracker rec-tracker';
