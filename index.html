@@ -1465,6 +1465,7 @@
   function trackEl(tr){
     var wrap=document.createElement('div');wrap.className='track'+(isComplete(tr)?' complete':'');
     var st=steps(tr), lab=statusLabelFor(tr);
+    var paymentBadge=paymentBadgeFor(tr);
     var row=document.createElement('div');row.className='row';
     // Preview lives on the cover art itself, on hover — open to both roles once a final master exists. Download from
     // here stays admin-only; the client's download lives in Final Production instead, gated on payment there.
@@ -1475,7 +1476,7 @@
         +(canDownload ? '<a class="r-thumb-btn" href="audio/'+encodeURIComponent(tr.audio.final)+'" download title="Download final master">&#8681;</a>' : '')
       +'</div>' : '';
     var thumb = '<div class="r-thumb-wrap">'+coverThumbHtml(tr)+thumbHover+'</div>';
-    row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+'</div></div>'
+    row.innerHTML=thumb+'<div class="r-main"><div class="r-title">'+esc(tr.title)+'</div><div class="r-status '+lab[1]+'">'+lab[0]+paymentBadge+'</div></div>'
       +'<div class="tracker">'+trackerHtml(tr,st)+'</div><div class="chev">▶</div>';
     wrap.appendChild(row);
     if(hasFinalFile){
@@ -1510,7 +1511,7 @@
     var st=steps(tr), lab=statusLabelFor(tr);
     var head=document.createElement('div');head.className='rec-head';
     head.innerHTML='<div class="r-thumb-wrap">'+coverThumbHtml(tr)+'</div>'
-      +'<div class="r-main"><div class="rec-head-title">'+esc(tr.title)+'</div><div class="r-status big '+lab[1]+'">'+lab[0]+'</div></div>';
+      +'<div class="r-main"><div class="rec-head-title">'+esc(tr.title)+'</div><div class="r-status big '+lab[1]+'">'+lab[0]+paymentBadgeFor(tr)+'</div></div>';
     wrap.appendChild(head);
 
     var trackerBar=document.createElement('div');trackerBar.className='tracker rec-tracker';
