@@ -331,7 +331,7 @@ app.get('/api/data', requireAuth, function(req,res){
   const proj=ctx.project, client=ctx.client;
   const out={ role:req.role, brand:DATA.brand,
     client:{ id:client.id, name:client.name, logo:client.logo||'' },
-    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', art:proj.art||'', metaDefaults:proj.metaDefaults||{}, requirePayment:proj.requirePayment!==false },
+    project:{ id:proj.id, name:proj.name, intro:proj.intro, preparedBy:proj.preparedBy, subtitle:proj.subtitle||'', art:proj.art||'', metaDefaults:proj.metaDefaults||{}, requirePayment:proj.requirePayment!==false, defaultPayUrl:proj.defaultPayUrl||'', defaultPayLabel:proj.defaultPayLabel||'' },
     contact: client.contact || {method:'WhatsApp'},
     categories: proj.categories, approvals: proj.approvals };
   if(req.role==='client') out.proposals = client.proposals || [];   // a client only ever sees their own proposals
@@ -647,6 +647,12 @@ app.post('/api/project-update', requireAdmin, function(req,res){
     var md=p.metaDefaults, sv=function(v,n){ return String(v==null?'':v).trim().slice(0,n); };
     proj.metaDefaults={ artist:sv(md.artist,200), album:sv(md.album,200), genre:sv(md.genre,80), year:sv(md.year,10), copyright:sv(md.copyright,200), copyrightUrl:sv(md.copyrightUrl,300) };
   }
+  if(p.defaultPayUrl!=null){   // fallback Stripe link used by any recording that doesn't have its own payUrl set (see payBlock in index.html)
+    var dpu=String(p.defaultPayUrl).trim().slice(0,500);
+    if(dpu==='' || /^https?:\/\//i.test(dpu)) proj.defaultPayUrl=dpu;
+    else return res.status(400).json({error:'Default payment link must start with https://'});
+  }
+  if(p.defaultPayLabel!=null) proj.defaultPayLabel=String(p.defaultPayLabel).slice(0,120);
   saveData(DATA); res.json({ok:true});
 });
 app.post('/api/project-set-code', requireAdmin, function(req,res){

@@ -1211,7 +1211,10 @@
       +'<input id="stMdYear" placeholder="Year" value="'+esc((D.project.metaDefaults||{}).year||'')+'" />'
       +'<input id="stMdCopyright" placeholder="Copyright (e.g. © 2026 Name)" value="'+esc((D.project.metaDefaults||{}).copyright||'')+'" />'
       +'<input id="stMdCopyrightUrl" placeholder="Copyright website" value="'+esc((D.project.metaDefaults||{}).copyrightUrl||'')+'" />'
-      +'<div class="sec-note" style="margin:0">Payment links and prices are set per recording, in that recording&rsquo;s Final Production admin box.</div>'
+      +'<div class="lbl" style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-top:6px">Default payment link</div>'
+      +'<div class="sec-note" style="margin:0">Used by any recording that doesn&rsquo;t have its own payment link set — handy when every recording in this project is the same price. Override on an individual recording&rsquo;s Final Production box when a price differs.</div>'
+      +'<input id="stDefPayUrl" placeholder="Stripe payment link (https://buy.stripe.com/...)" value="'+esc(D.project.defaultPayUrl||'')+'" />'
+      +'<input id="stDefPayLabel" placeholder="Price label shown to client (e.g. $400 USD)" value="'+esc(D.project.defaultPayLabel||'')+'" />'
       +'<label class="toggle-lbl" style="margin-top:4px"><input type="checkbox" id="stReqPay" '+(D.project.requirePayment!==false?'checked':'')+'> Require payment before the client can download the final master</label>'
       +'<div class="sec-note" style="margin:0">On by default. Turn off for a trusted relationship where you&rsquo;re comfortable the download isn&rsquo;t gated on payment landing first.</div>'
       +'<div><button class="mini-btn" id="stSave">Save settings</button></div>'
@@ -1226,8 +1229,9 @@
       var subVal=document.getElementById('stSub').value.trim();
       var mdVal={artist:document.getElementById('stMdArtist').value.trim(),album:document.getElementById('stMdAlbum').value.trim(),genre:document.getElementById('stMdGenre').value.trim(),year:document.getElementById('stMdYear').value.trim(),copyright:document.getElementById('stMdCopyright').value.trim(),copyrightUrl:document.getElementById('stMdCopyrightUrl').value.trim()};
       var reqPayVal=document.getElementById('stReqPay').checked;
-      api('POST','/api/project-update',{projectId:D.project.id,name:nameVal,intro:introVal,preparedBy:prepVal,subtitle:subVal,metaDefaults:mdVal,requirePayment:reqPayVal})
-        .then(function(){ if(nameVal) D.project.name=nameVal; D.project.intro=introVal; D.project.preparedBy=prepVal; D.project.subtitle=subVal; D.project.metaDefaults=mdVal; D.project.requirePayment=reqPayVal; applyProjectChrome(); msg.className='acct-msg ok'; msg.textContent='Saved.'; })
+      var defPayUrlVal=document.getElementById('stDefPayUrl').value.trim(), defPayLabelVal=document.getElementById('stDefPayLabel').value.trim();
+      api('POST','/api/project-update',{projectId:D.project.id,name:nameVal,intro:introVal,preparedBy:prepVal,subtitle:subVal,metaDefaults:mdVal,requirePayment:reqPayVal,defaultPayUrl:defPayUrlVal,defaultPayLabel:defPayLabelVal})
+        .then(function(){ if(nameVal) D.project.name=nameVal; D.project.intro=introVal; D.project.preparedBy=prepVal; D.project.subtitle=subVal; D.project.metaDefaults=mdVal; D.project.requirePayment=reqPayVal; D.project.defaultPayUrl=defPayUrlVal; D.project.defaultPayLabel=defPayLabelVal; applyProjectChrome(); msg.className='acct-msg ok'; msg.textContent='Saved.'; })
         .catch(function(e){ msg.className='acct-msg err'; msg.textContent=(e&&e.error)||'Failed'; });
     });
   }
@@ -1627,7 +1631,9 @@
     return url+(url.indexOf('?')>=0?'&':'?')+'client_reference_id='+ref;
   }
   function payBlock(tr){
-    var a=appr(tr.id), payUrl=tr.payUrl, payLabel=tr.payLabel||'';
+    var a=appr(tr.id);
+    var payUrl=tr.payUrl||(D.project&&D.project.defaultPayUrl)||'';
+    var payLabel=tr.payLabel||(D.project&&D.project.defaultPayLabel)||'';
     if(vr()==='client'){
       if(!tr.final) return null;                 // only once the final master is released
       var approved=!!a.finalApproved;
@@ -1934,7 +1940,8 @@
         +'<div class="admin-row" data-file-row></div>'
         +'<div class="admin-row"><label class="toggle-lbl"><input type="checkbox" data-ready '+(ready?'checked':'')+'> Ready for client to review</label></div>'
         +'<div class="lbl" style="margin-top:10px">Payment for this recording</div>'
-        +'<div class="admin-row"><input data-payurl placeholder="Stripe payment link (https://buy.stripe.com/...)" value="'+esc(tr.payUrl||'')+'" style="width:100%" /></div>'
+        +(!tr.payUrl && D.project && D.project.defaultPayUrl ? '<div class="admin-row uling">Using the project\'s default payment link. Set one below to override it for this recording only.</div>' : '')
+        +'<div class="admin-row"><input data-payurl placeholder="'+(D.project&&D.project.defaultPayUrl?'Leave blank to use the project default':'Stripe payment link (https://buy.stripe.com/...)')+'" value="'+esc(tr.payUrl||'')+'" style="width:100%" /></div>'
         +'<div class="admin-row"><input data-paylabel placeholder="Price label shown to client (e.g. $400 USD)" value="'+esc(tr.payLabel||'')+'" style="width:100%" /></div>'
         +'<div class="admin-row"><label class="toggle-lbl"><input type="checkbox" data-paid '+(tr.paid?'checked':'')+'> Mark as paid</label>'
           +(tr.paid?' <span class="uling">'+esc(tr.paidVia||'')+(tr.paidAt?' · '+new Date(tr.paidAt).toLocaleDateString():'')+'</span>'
